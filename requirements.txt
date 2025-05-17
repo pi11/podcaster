@@ -1,0 +1,9 @@
+python-dotenv
+aerich
+tortoise-orm[asyncpg]
+python-telegram-bot
+yt-dlp
+sanic
+sanic-ext
+pydantic-settings
+jinja2
