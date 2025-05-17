@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow-md p-6 mb-6">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">Podcast Statistics</h1>
+        <a href="/podcasts" class="text-blue-600 hover:underline">Back to Podcasts</a>
+    </div>
+    
+    <!-- Overall Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div class="bg-blue-50 p-4 rounded-lg text-center shadow">
+            <div class="text-3xl font-bold text-blue-600">{{ total_count }}</div>
+            <div class="text-gray-600">Total Podcasts</div>
+        </div>
+        <div class="bg-green-50 p-4 rounded-lg text-center shadow">
+            <div class="text-3xl font-bold text-green-600">{{ posted_count }}</div>
+            <div class="text-gray-600">Posted</div>
+        </div>
+        <div class="bg-yellow-50 p-4 rounded-lg text-center shadow">
+            <div class="text-3xl font-bold text-yellow-600">{{ not_posted_count }}</div>
+            <div class="text-gray-600">Not Posted</div>
+        </div>
+    </div>
+    
+    <!-- Monthly Stats -->
+    <h2 class="text-xl font-semibold mb-4">Monthly Breakdown</h2>
+    <div class="overflow-x-auto mb-8">
+        <table class="min-w-full bg-white border">
+            <thead>
+                <tr class="bg-gray-100 text-gray-700">
+                    <th class="py-2 px-4 border">Month</th>
+                    <th class="py-2 px-4 border">Total</th>
+                    <th class="py-2 px-4 border">Posted</th>
+                    <th class="py-2 px-4 border">Not Posted</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stat in monthly_stats %}
+                <tr class="hover:bg-gray-50">
+                    <td class="py-2 px-4 border">{{ stat.month }}</td>
+                    <td class="py-2 px-4 border text-center">{{ stat.count }}</td>
+                    <td class="py-2 px-4 border text-center text-green-600">{{ stat.posted_count }}</td>
+                    <td class="py-2 px-4 border text-center text-yellow-600">{{ stat.not_posted_count }}</td>
+                </tr>
+                {% endfor %}
+                {% if not monthly_stats %}
+                <tr>
+                    <td colspan="4" class="py-4 text-center text-gray-500">No monthly data available</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Source Stats -->
+    <h2 class="text-xl font-semibold mb-4">Source Breakdown</h2>
+    <div class="overflow-x-auto">
+        <table class="min-w-full bg-white border">
+            <thead>
+                <tr class="bg-gray-100 text-gray-700">
+                    <th class="py-2 px-4 border">Source</th>
+                    <th class="py-2 px-4 border">Total</th>
+                    <th class="py-2 px-4 border">Posted</th>
+                    <th class="py-2 px-4 border">Not Posted</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stat in source_stats %}
+                <tr class="hover:bg-gray-50">
+                    <td class="py-2 px-4 border">
+                        <a href="/sources/{{ stat.source.id }}" class="text-blue-600 hover:underline">
+                            {{ stat.source.name }}
+                        </a>
+                    </td>
+                    <td class="py-2 px-4 border text-center">{{ stat.count }}</td>
+                    <td class="py-2 px-4 border text-center text-green-600">{{ stat.posted_count }}</td>
+                    <td class="py-2 px-4 border text-center text-yellow-600">{{ stat.not_posted_count }}</td>
+                </tr>
+                {% endfor %}
+                {% if not source_stats %}
+                <tr>
+                    <td colspan="4" class="py-4 text-center text-gray-500">No source data available</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- HTMX refresh button -->
+<div class="text-center mt-6">
+    <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            hx-get="/podcasts/stats"
+            hx-target="body"
+            hx-swap="innerHTML">
+        Refresh Statistics
+        <span class="htmx-indicator ml-2">
+            <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        </span>
+    </button>
+</div>
+{% endblock %}

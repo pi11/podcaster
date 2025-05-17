@@ -4,20 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>{% block title %}{% endblock %}Панель управления Youtube/Telegram видео бота</title>
-      <link rel="stylesheet" href="{{ STATIC_URL }}css/normalize.css">
-      <link rel="stylesheet" href="{{ STATIC_URL }}css/main.css?v16">
+      <link rel="stylesheet" href="{{ STATIC_URL }}css/normalize.css" />
+      <link rel="stylesheet" href="{{ STATIC_URL }}css/main.css?v16" />
+      <script defer src="{{ STATIC_URL }}js/htmx.js"></script>
 </head>
 <body>
     <div class="container">
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="sidebar-header">
-                <h2>Панель управления</h2>
+              <a href="/"><img src="{{ STATIC_URL }}images/logo.png" width="200px" /></a>
+              <h2>Панель управления</h2>
             </div>
             <div class="sidebar-menu">
                 <ul>
-                    <li class="active"><a href="#"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                    <li><a href="/channels"><i class="fas fa-users"></i> Каналы</a></li>
+                    <li ><a href="/"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
+                    <li><a href="/sources"><i class="fas fa-users"></i> Каналы</a></li>
                     <li><a href="/podcasts"><i class="fas fa-box"></i> Подкасты</a></li>
                     <li><a href="/categories"><i class="fas fa-chart-line"></i> Категории</a></li>
                 </ul>
@@ -26,52 +28,11 @@
         
         <!-- Main Content -->
         <div class="main-content">
-            <div class="header">
+            <!--<div class="header">
                 <input type="text" class="search-bar" placeholder="Поиск...">
-            </div>
-            
-            <!-- Dashboard Cards -->
-            <div class="dashboard-cards">
-                <div class="card">
-                    <div class="card-header">Всего каналов</div>
-                    <div class="card-value">{{ total_channels }}</div>
-                </div>
-                <div class="card">
-                    <div class="card-header">Всего подкастов</div>
-                    <div class="card-value">{{ total_podcasts }}</div>
-                </div>
-            </div>
-            
-            <!-- Recent podcasts -->
-            <div class="table-container">
-                <h3>Последние загруженные подскаты:</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Название</th>
-                            <th>Url</th>
-                            <th>Статус</th>
-                            <th>Действия</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                      {% for p in podcats %}
-                        <tr>
-                            <td>{{ p.id }}</td>
-                            <td>{{ p.name }}</td>
-                            <td>{{ p.url }}</td>
-                            <td>{% if p.is_posted %}<span class="status active">Загружен</span>{% else %}<span class="status inactive">Не загружен</span>{% endif %}</td>
-                            <td>
-                                <button class="button">Скрыть</button>
-                                <button class="button delete-button">Удалить</button>
-                            </td>
-                        </tr>
-                      {% endfor %}
-                        
-                    </tbody>
-                </table>
-            </div>
+            </div>-->
+            {% block content %}
+            {% endblock %}
         </div>
     </div>
 </body>

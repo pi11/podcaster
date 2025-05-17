@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="">
+    <h1 class="">Каналы</h1>
+    
+    <!-- Sources List -->
+    <div class="overflow-x-auto">
+        <table class="min-w-full bg-white border">
+            <thead>
+                <tr class="bg-gray-100 text-gray-700">
+                    <th>ID</th>
+                    <th>Название</th>
+                    <th>Урл</th>
+                    <th>Стата</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="sources-table">
+              {% for source in sources %}
+              {% include "sources/row.html" %}
+              {% endfor %}
+            </tbody>
+        </table>
+        
+        <!-- Empty State -->
+        {% if not sources %}
+            <div id="empty-state">
+                <p class="text-gray-600">No sources available yet. Add your first source above.</p>
+            </div>
+        {% endif %}
+      </div>
+
+
+
+    <div class="form-container" style="padding-top:20px;">
+        <h2 class="form-title">Добавление нового канала</h2>
+
+        <form hx-post="/sources"
+              hx-target="#sources-table"
+              hx-swap="beforeend"
+              hx-indicator="#submit-indicator">
+
+            <div class="form-group">
+                <label for="name">Название</label>
+                <input type="text"
+                       id="name"
+                       name="name"
+                       required
+                       placeholder="Название канала">
+            </div>
+
+            <div class="form-group">
+                <label for="url">URL</label>
+                <input type="url"
+                       id="url"
+                       name="url"
+                       required
+                       placeholder="https://youtube.com/channel/...">
+            </div>
+
+            <div class="form-group">
+                <label for="min_duration">Минимальная длительность (сек)</label>
+                <input type="text"
+                       id="min_duration"
+                       name="min_duration"
+                       value="1800">
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn">
+                    <span>Добавить канал</span>
+                </button>
+            </div>
+        </form>
+      </div>
+      
+{% endblock %}

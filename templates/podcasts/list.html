@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<table class="table delete-row-example">
+  <thead>
+    <tr>
+      <th>Урл</th>
+      <th>Название</th>
+      <th>Скачано</th>
+      <th>Дата публикации</th>
+      <th>Отправлено в TG</th>
+    </tr>
+  </thead>
+  <tbody hx-target="closest tr" hx-swap="outerHTML">
+    {% for p in podcasts %}
+    <tr>
+      <td><a href="{{ p.url }}">{{ p.yt_id }}</a></td>
+      <td>{{ p.name }}</td>
+      <td>{{ p.publication_date }}</td>
+      <td>{% if p.is_downloaded %}✅{% else %}🚫{% endif %}</td>
+      <td>
+        {% if p.is_posted %}🟢{% else %}🔴{% endif %}
+        <!--<button class="btn danger"
+                hx-get=""
+                hx-trigger="edit"
+                onClick="">
+          Edit
+        </button>
+        -->
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

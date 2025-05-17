@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow-md p-6 mb-6">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">Category: {{ category.name }}</h1>
+        <div class="flex space-x-3">
+            <a href="/categories" class="text-blue-600 hover:underline flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+                </svg>
+                Back to Categories
+            </a>
+        </div>
+    </div>
+    
+    <!-- Category Details -->
+    <div class="mb-8">
+        <div class="bg-gray-50 p-4 rounded-lg">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500">ID</h3>
+                    <p>{{ category.id }}</p>
+                </div>
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500">Name</h3>
+                    <p>{{ category.name }}</p>
+                </div>
+            </div>
+            <div class="mt-4 flex space-x-2">
+                <button onclick="toggleEditForm()"
+                        class="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm">
+                    Edit Category
+                </button>
+                <button hx-post="/categories/{{ category.id }}/delete"
+                        hx-confirm="Are you sure you want to delete this category? This will also delete all its identifications."
+                        hx-push-url="/categories"
+                        class="bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 text-sm">
+                    Delete Category
+                </button>
+            </div>
+            
+            <!-- Inline Edit Form (Initially Hidden) -->
+            <form id="edit-form" class="hidden mt-4 bg-white p-4 border rounded-lg shadow-sm" hx-post="/categories/{{ category.id }}">
+                <div class="mb-4">
+                    <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Category Name</label>
+                    <input type="text" 
+                           id="name" 
+                           name="name" 
+                           value="{{ category.name }}" 
+                           required 
+                           class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="flex space-x-2">
+                    <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm">
+                        Save Changes
+                    </button>
+                    <button type="button" onclick="toggleEditForm()" class="bg-gray-300 text-gray-700 px-3 py-1 rounded-md hover:bg-gray-400 text-sm">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Category Identifications -->
+    <div>
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">Identifications</h2>
+            <button id="show-add-form-btn" 
+                    onclick="toggleAddForm()"
+                    class="bg-green-600 text-white px-3 py-1 rounded-md hover:bg-green-700 text-sm">
+                Add Identification
+            </button>
+        </div>
+        
+        <!-- Add Identification Form (Initially Hidden) -->
+        <div id="add-identification-form" class="hidden mb-4 bg-gray-50 p-4 rounded-lg">
+            <h3 class="text-md font-medium mb-3">Add New Identification</h3>
+            <form hx-post="/identifications" 
+                  hx-target="#identifications-list" 
+                  hx-swap="beforeend"
+                  hx-indicator="#submit-indicator">
+                <input type="hidden" name="category_id" value="{{ category.id }}">
+                <div class="mb-3">
+                    <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Identification Word</label>
+                    <input type="text" 
+                           id="ident-name" 
+                           name="name" 
+                           required 
+                           class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="flex space-x-2">
+                    <button type="submit" 
+                            class="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 text-sm flex items-center">
+                        <span>Add</span>
+                        <span id="submit-indicator" class="htmx-indicator ml-2">
+                            <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </span>
+                    </button>
+                    <button type="button" 
+                            onclick="toggleAddForm()"
+                            class="bg-gray-300 text-gray-700 px-3 py-1 rounded-md hover:bg-gray-400 text-sm">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Identifications List -->
+        <div class="bg-white border rounded-lg overflow-hidden">
+            {% if identifications %}
+                <ul id="identifications-list" class="divide-y">
+                    {% for identification in identifications %}
+                        <li id="identification-{{ identification.id }}" class="p-4 flex justify-between items-center hover:bg-gray-50">
+                            <span>{{ identification.name }}</span>
+                            <div class="flex space-x-2">
+                                <button hx-post="/identifications/{{ identification.id }}/delete"
+                                        hx-confirm="Are you sure you want to delete this identification?"
+                                        hx-target="#identification-{{ identification.id }}"
+                                        hx-swap="outerHTML"
+                                        class="text-red-600 hover:underline text-sm">
+                                    Delete
+                                </button>
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <div id="identifications-list" class="text-center py-8 text-gray-500">
+                    No identifications added yet
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript for toggling forms -->
+<script>
+    function toggleEditForm() {
+        const form = document.getElementById('edit-form');
+        if (form.style.display === 'block') {
+            form.style.display = 'none';
+        } else {
+            form.style.display = 'block';
+        }
+    }
+    
+    function toggleAddForm() {
+        const form = document.getElementById('add-identification-form');
+        const btn = document.getElementById('show-add-form-btn');
+        
+        if (form.style.display === 'block') {
+            form.style.display = 'none';
+            btn.textContent = 'Add Identification';
+        } else {
+            form.style.display = 'block';
+            btn.textContent = 'Cancel';
+        }
+    }
+    
+    // Clear and hide the add form after successful submission
+    document.body.addEventListener('htmx:afterOnLoad', function(evt) {
+        if (evt.detail.elt.id === 'identifications-list' && evt.detail.xhr.status === 200) {
+            document.getElementById('ident-name').value = '';
+            
+            // Replace empty state if it exists
+            if (document.getElementById('identifications-list').tagName === 'DIV') {
+                document.getElementById('identifications-list').innerHTML = '';
+                document.getElementById('identifications-list').outerHTML = '<ul id="identifications-list" class="divide-y"></ul>';
+            }
+            
+            // Hide the form
+            document.getElementById('add-identification-form').style.display = 'none';
+            document.getElementById('show-add-form-btn').textContent = 'Add Identification';
+        }
+    });
+</script>
+{% endblock %}
