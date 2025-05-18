@@ -7,3 +7,4 @@ sanic
 sanic-ext
 pydantic-settings
 jinja2
+mutagen

@@ -76,6 +76,7 @@ class Podcast(models.Model):
     filesize = fields.IntField(default=0)
 
     thumbnail_url = fields.CharField(max_length=512, null=True)
+    thumbnail = fields.CharField(max_length=200, null=True)
 
     def __str__(self):
         return self.url

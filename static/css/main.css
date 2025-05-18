@@ -148,6 +148,7 @@ tr:hover {
 
 .status {
     padding: 5px 10px;
+    line-height: 2.4;
     border-radius: 20px;
     font-size: 12px;
     font-weight: bold;

@@ -6,6 +6,7 @@ converts them to MP3 format, and updates the database with the new podcasts.
 
 import os
 import logging
+import aiohttp
 import asyncio
 import datetime
 from datetime import timedelta
@@ -31,9 +32,9 @@ logger = logging.getLogger(__name__)
 BASE_DIR = os.getcwd()
 OUTPUT_DIR = os.path.join(BASE_DIR, os.getenv("MEDIA_DIR", "media"))
 
-MAX_VIDEOS_PER_CHANNEL = 6  # Maximum number of videos to download per channel
+MAX_VIDEOS_PER_CHANNEL = 10  # Maximum number of videos to download per channel
 MAX_VIDEO_AGE_DAYS = 1400  # Only download videos published within the last 14 days
-DOWNLOAD_AUDIO_QUALITY = "192"  # Audio quality in kbps
+DOWNLOAD_AUDIO_QUALITY = "64"  # Audio quality in kbps
 
 
 async def init_db():
@@ -69,7 +70,7 @@ def download_audio(video_url, output_path):
         os.makedirs(output_path, exist_ok=True)
 
         # Prepare yt-dlp command
-        output_template = os.path.join(output_path, "%(title)s.%(ext)s")
+        output_template = os.path.join(output_path, "%(id)s.%(ext)s")
 
         # First, get video info including upload date
         info_cmd = ["yt-dlp", "--dump-json", "--no-playlist", video_url]
@@ -135,6 +136,7 @@ def download_audio(video_url, output_path):
                 "upload_date": upload_date,
                 "filename": expected_filename,
                 "file_path": expected_path,
+                "thumbnail": video_info["thumbnail"],
                 "channel": video_info.get("channel", ""),
                 "duration": video_info.get("duration", 0),
             }
@@ -261,9 +263,17 @@ async def process_channel(source):
                 if downloaded:
                     logger.info(f"File downloaded: {downloaded['file_path']}")
                     filesize = os.path.getsize(downloaded.get("file_path", 0))
+
+                    thumbnail_path = f"{downloaded.get("file_path")}-thumb.jpg"
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(podcast.thumnbnail_url) as response:
+                            if response.status == 200:
+                                with open(thumbnail_path, "wb") as f:
+                                    f.write(await response.read())
                     # Update podcast entry in database
                     podcast.file = downloaded.get("file_path")
                     podcast.filesize = filesize
+                    podcast.thumbnail = thumbnail_path
                     podcast.is_downloaded = True
                     await podcast.save()
                 else:

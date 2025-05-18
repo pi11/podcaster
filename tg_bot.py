@@ -5,6 +5,7 @@ This script runs a Telegram bot that can post podcasts to a Telegram channel.
 
 import os
 import logging
+import traceback
 import asyncio
 import datetime
 import json
@@ -110,17 +111,10 @@ async def post_command(update: Update, context: CallbackContext) -> None:
         await init_db()
 
         # Get the podcast
-        podcasts = await PodcastService.get_recent()
-        for p in podcasts:
-            if p.is_downloaded:
-                if (p.filesize / 1000 / 1000) < 50:
-                    podcast = p
-                    print(f"Found: {p}")
-                break
+        podcast = await PodcastService.get_good()  # ready for posting podcasts
         if not podcast:
             await update.message.reply_text(f"No more podcast")
             return
-
         # Post to channel
         success = await post_podcast_to_telegram(podcast, context.bot, channel_id)
 
@@ -140,6 +134,7 @@ async def post_command(update: Update, context: CallbackContext) -> None:
 
     except Exception as e:
         logger.error(f"Error in post command: {e}")
+        print(traceback.format_exc())
         await update.message.reply_text(f"Error posting podcast: {str(e)}")
     finally:
         await close_db()
@@ -157,6 +152,10 @@ async def post_podcast_to_telegram(podcast, bot, channel_id):
     Returns:
         bool: True if successful, False otherwise
     """
+    if not podcast:
+        print("No podcast")
+    else:
+        print(f"Podcast: {podcast}")
     try:
         # Get category name if available
         category_name = None
@@ -175,8 +174,19 @@ async def post_podcast_to_telegram(podcast, bot, channel_id):
             message += f"\n{hashtag}"
 
         with open(podcast.file, "rb") as audio:
+            if os.path.exists(podcast.thumbnail):
+                thumbnail = open(podcast.thumbnail, "rb")
+                print("Posting with thumbnail!")
+            else:
+                print("Posting without thumb")
+                thumbnail = None
+
             await bot.send_audio(
-                chat_id=channel_id, audio=audio, caption=message, title=podcast.name
+                chat_id=channel_id,
+                audio=audio,
+                caption=message,
+                title=podcast.name,
+                thumbnail=thumbnail,
             )
         logger.info(f"Posted podcast '{podcast.name}' to Telegram channel")
         podcast.is_posted = True

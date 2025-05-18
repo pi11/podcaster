@@ -173,6 +173,15 @@ class PodcastService:
         return await Podcast.all().prefetch_related("source")
 
     @staticmethod
+    async def get_good() -> List[Podcast]:
+        """Get podcasts ready for posting"""
+        return (
+            await Podcast.filter(is_active=True, is_posted=False, is_processed=True)
+            .order_by("publication_date")
+            .first()
+        )
+
+    @staticmethod
     async def get_by_id(id: int) -> Optional[Podcast]:
         """Get podcast by id"""
         try:
