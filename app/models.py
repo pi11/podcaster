@@ -7,6 +7,7 @@ from enum import IntEnum
 from typing import List
 from slugify import slugify
 from tortoise import fields, models
+from app.utils.helpers import humanizeTimeDiff
 
 # from tortoise.contrib.pydantic import pydantic_model_creator
 # import pydantic
@@ -41,6 +42,19 @@ class CategoryIdentification(models.Model):
         table = "category_identification"
 
 
+class TgChannel(models.Model):
+    id = fields.IntField(pk=True)
+    name = fields.CharField(max_length=100)
+    tg_id = fields.CharField(max_length=30, unique=True)
+    auto_post = fields.BooleanField(default=False)
+
+    def __str__(self):
+        return self.tg_id
+
+    class Meta:
+        table = "tgchannel"
+
+
 class Source(models.Model):
     """Sources (youtube channels)"""
 
@@ -48,6 +62,12 @@ class Source(models.Model):
     url = fields.CharField(max_length=500, unique=True)
     name = fields.CharField(max_length=200)
     min_duration = fields.IntField(default=0)
+    only_related = fields.BooleanField(
+        default=False
+    )  # if set, load only videos with related categories found
+    tg_channel = fields.ForeignKeyField(
+        "models.TgChannel", related_name="tg_channel", null=True
+    )
 
     def __str__(self):
         return self.url
@@ -69,17 +89,25 @@ class Podcast(models.Model):
     publication_date = fields.DatetimeField()
     is_active = fields.BooleanField(default=True)
     is_posted = fields.BooleanField(default=False)
+    is_awaiting_post = fields.BooleanField(default=False)
     is_processed = fields.BooleanField(default=False)
     is_downloaded = fields.BooleanField(default=False)
 
     file = fields.CharField(max_length=250, null=True)
     filesize = fields.IntField(default=0)
 
+    categories: fields.ManyToManyRelation["Category"] = fields.ManyToManyField(
+        "models.Category", related_name="categories"
+    )
+
     thumbnail_url = fields.CharField(max_length=512, null=True)
     thumbnail = fields.CharField(max_length=200, null=True)
 
     def __str__(self):
         return self.url
+
+    def get_date(self):
+        return humanizeTimeDiff(self.publication_date)
 
     class Meta:
         table = "podcast"

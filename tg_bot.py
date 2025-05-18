@@ -1,5 +1,5 @@
 """
-Telegram Bot for GMP Podcast Manager
+Telegram Bot for Podcast Manager
 This script runs a Telegram bot that can post podcasts to a Telegram channel.
 """
 
@@ -26,6 +26,7 @@ from telegram import Update
 from app.models import Podcast, Category, CategoryIdentification
 from app.services import PodcastService, CategoryService, CategoryIdentificationService
 from app.config import TG_TOKEN, TG_CHANNEL
+from app.helpers.utils import close_db, init_db
 
 # Configure logging
 logging.basicConfig(
@@ -34,23 +35,6 @@ logging.basicConfig(
     handlers=[logging.FileHandler("telegram_bot.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
-
-
-async def init_db():
-    """Initialize database connection"""
-    logger.info("Initializing database connection")
-
-    # Import your database configuration
-    from app.config import TORTOISE_ORM
-
-    await Tortoise.init(config=TORTOISE_ORM)
-    logger.info("Database connection established")
-
-
-async def close_db():
-    """Close database connection"""
-    logger.info("Closing database connection")
-    await Tortoise.close_connections()
 
 
 async def start(update: Update, context: CallbackContext) -> None:
@@ -206,6 +190,12 @@ async def error_handler(update: Update, context: CallbackContext) -> None:
         await update.effective_message.reply_text(
             "An error occurred while processing your request. Please try again later."
         )
+
+
+async def post_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Job to post awaited"""
+    print("hello")
+    logger.info("Scheduled job: hello")
 
 
 def main():

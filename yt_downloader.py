@@ -1,5 +1,5 @@
 """
-YouTube Channel to MP3 Downloader Script for GMP Podcast Manager
+YouTube Channel to MP3 Downloader Script for Podcast Manager
 This script fetches videos from YouTube channels stored in the database,
 converts them to MP3 format, and updates the database with the new podcasts.
 """
@@ -19,6 +19,7 @@ import yt_dlp
 # App specific imports
 from app.models import Source, Podcast
 from app.services import SourceService, PodcastService
+from app.utils.helpers import close_db, init_db
 
 # Configure logging
 logging.basicConfig(
@@ -35,23 +36,6 @@ OUTPUT_DIR = os.path.join(BASE_DIR, os.getenv("MEDIA_DIR", "media"))
 MAX_VIDEOS_PER_CHANNEL = 10  # Maximum number of videos to download per channel
 MAX_VIDEO_AGE_DAYS = 1400  # Only download videos published within the last 14 days
 DOWNLOAD_AUDIO_QUALITY = "64"  # Audio quality in kbps
-
-
-async def init_db():
-    """Initialize database connection"""
-    logger.info("Initializing database connection")
-
-    # Import your database configuration
-    from app.config import TORTOISE_ORM
-
-    await Tortoise.init(config=TORTOISE_ORM)
-    logger.info("Database connection established")
-
-
-async def close_db():
-    """Close database connection"""
-    logger.info("Closing database connection")
-    await Tortoise.close_connections()
 
 
 def download_audio(video_url, output_path):
@@ -125,7 +109,7 @@ def download_audio(video_url, output_path):
         process = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
         # Check for output file
-        expected_filename = f"{video_info.get('title')}.mp3"
+        expected_filename = f"{video_info.get('id')}.mp3"
         expected_path = os.path.join(output_path, expected_filename)
 
         if os.path.exists(expected_path):
@@ -244,19 +228,25 @@ async def process_channel(source):
                         continue
 
                 else:
+                    nd = await PodcastService.get_next_publication_date()
                     podcast_data = {
                         "name": video_info.get("title"),
                         "description": video_info.get("description", ""),
                         "url": video_url,
                         "source_id": source.id,
                         "yt_id": video_info.get("id"),
-                        "publication_date": PodcastService.get_next_publication_date(),
+                        "publication_date": nd,
                         "is_processed": False,
                         "file": None,
                         "is_posted": False,  # Set to False by default, can be activated later
                         "thumbnail_url": video_info.get("thumbnail", ""),
                     }
                     podcast = await PodcastService.create(podcast_data)
+
+                if source.only_related:
+                    # check if video related to one of the categories
+                    logger.info("Check if podcast related to themes")
+                    PodcastService.check_theme(id=podcast.id)
 
                 # Download the video as MP3
                 downloaded = download_audio(video_url, channel_dir)
@@ -266,7 +256,7 @@ async def process_channel(source):
 
                     thumbnail_path = f"{downloaded.get("file_path")}-thumb.jpg"
                     async with aiohttp.ClientSession() as session:
-                        async with session.get(podcast.thumnbnail_url) as response:
+                        async with session.get(podcast.thumbnail_url) as response:
                             if response.status == 200:
                                 with open(thumbnail_path, "wb") as f:
                                     f.write(await response.read())

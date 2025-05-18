@@ -1,12 +1,14 @@
 """Services for podcaster project"""
 
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from typing import List, Optional, Dict, Any
 from tortoise.exceptions import DoesNotExist, IntegrityError
 
 from app.models import Category, CategoryIdentification, Source, Podcast
+
+PUBLICATION_SPEED = 60 * 4  # 4 hourse
 
 
 class CategoryService:
@@ -130,10 +132,10 @@ class SourceService:
             return None
 
     @staticmethod
-    async def create(url: str, name: str) -> Source:
+    async def create(url: str, name: str, only_related: bool = False) -> Source:
         """Create new source"""
         try:
-            return await Source.create(url=url, name=name)
+            return await Source.create(url=url, name=name, only_related=only_related)
         except IntegrityError:
             # Handle duplicate URL
             return None
@@ -182,6 +184,38 @@ class PodcastService:
         )
 
     @staticmethod
+    async def check_theme(id: int) -> bool:
+        """Check if podcast has related themes
+        and disable if no
+        returns False if podcast is not suitable"""
+        podcast = await Podcast.get(id=id)
+        check_str = f"{podcast.name} {podcast.description}"
+        cats = await CategoryService.get_all()
+        good = False
+        for cat in cats:
+            _ = cat.name.lower()
+            if _ in check_str:
+                await podcast.categories.add(cat)
+                print(f"Added cat {cat} to {podcast.name}")
+                good = True
+        podcast.is_active = good
+        await podcast.save()
+        return good
+
+    @staticmethod
+    async def add_categories(id: int) -> None:
+        """Add corresponding categories to podcast"""
+        podcast = await Podcast.get(id=id)
+        cats = await CategoryService.get_all()
+        add = False
+        desc = f"{podcast.name} {podcast.description}".lower()
+        for cat in cats:
+            _ = cat.name.lower()
+            if _ in desc:
+                await podcast.categories.add(cat)
+                print(f"added cat {cat} to {podcast.name}")
+
+    @staticmethod
     async def get_by_id(id: int) -> Optional[Podcast]:
         """Get podcast by id"""
         try:
@@ -196,13 +230,21 @@ class PodcastService:
             await Podcast.all()
             .order_by("-publication_date")
             .limit(limit)
-            .prefetch_related("source")
+            .prefetch_related("categories")
         )
 
     @staticmethod
-    def get_next_publication_date() -> datetime:
+    async def get_next_publication_date() -> datetime:
         """Get next free publication date for podcast"""
-        return datetime.now()  # FIXME
+        last_podcast = (
+            await Podcast.filter(is_active=True, is_posted=False)
+            .order_by("-publication_date")
+            .first()
+        )
+        if not last_podcast:
+            return datetime.now()
+        else:
+            return last_podcast.publication_date + timedelta(minutes=PUBLICATION_SPEED)
 
     @staticmethod
     async def get_by_source(source_id: int) -> List[Podcast]:

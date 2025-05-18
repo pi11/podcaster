@@ -12,53 +12,14 @@
                 </div>
                 <div class="card">
                     <div class="card-header">Категории</div>
-                    <div class="card-value">{{ categories_count }}</div>
+                    <div class="card-value"><a href="/categories">{{ categories_count }}</a></div>
                 </div>
             </div>
             
             <!-- Recent podcasts -->
             <div class="table-container">
-                <h3>Последние загруженные подкаcты:</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Название</th>
-                            <!--<th>Url</th>-->
-                            <th>Статус</th>
-                            <th>Действия</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                      {% for p in recent_podcasts %}
-                        <tr>
-                            <td>{{ p.id }}</td>
-                            <td>{{ p.name }}
-                            <br />
-                            <a target="_blank" href="{{ p.url }}"><img src="{{ p.thumbnail_url }}" width="300px;"/></a>
-
-                            </td>
-                            <!--<td><a href="{{ p.url }}">{{ p.yt_id }}</a></td>-->
-                            <td>
-                              {% if p.is_posted %}<span class="status active">Загружен</span>{% else %}<span class="status inactive">Не&nbsp;загружен</span>{% endif %}
-                              
-                              {% if p.is_downloaded %}<span class="status active">Скачан</span>{% else %}<span class="status inactive">Не&nbsp;скачан</span>{% endif %}
-                              {% if p.is_processed %}<span class="status active">Обработан</span>{% else %}<span class="status inactive">Не&nbsp;обработан</span>{% endif %}
-                              
-                            </td>
-                            <td>
-                              {% if p.is_active %}
-                              {% include "podcasts/activated.html" %}
-                              {% else %}
-                              {% include "podcasts/deactivated.html" %}
-                              {% endif %}
-                              
-                            </td>
-                        </tr>
-                      {% endfor %}
-                        
-                    </tbody>
-                </table>
+              <h3>Последние загруженные подкаcты:</h3>
+              {% include "podcasts/pod-list.html" %}
             </div>
 
 {% endblock %}

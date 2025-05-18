@@ -20,7 +20,7 @@ bp = Blueprint("main", url_prefix="/")
 @bp.route("/", methods=["GET"])
 async def index(request):
     """Render index page"""
-    recent_podcasts = await PodcastService.get_recent(limit=5)
+    recent_podcasts = await PodcastService.get_recent(limit=25)
     podcasts_count = await PodcastService.count()
     categories_count = await CategoryService.count()
     channels_count = await SourceService.count()
@@ -28,7 +28,7 @@ async def index(request):
         "index.html",
         context=inj(
             {
-                "recent_podcasts": recent_podcasts,
+                "podcasts": recent_podcasts,
                 "categories_count": categories_count,
                 "podcasts_count": podcasts_count,
                 "channels_count": channels_count,
@@ -229,14 +229,16 @@ async def sources_list(request):
 @bp.route("/sources", methods=["POST"])
 async def sources_create(request):
     """Create new source"""
-    print("DDDD")
     url = request.form.get("url")
     name = request.form.get("name")
+    tg_channel = request.form.get("tg_channel")
+
+    only_related = request.form.get("only_related")
 
     if not url or not name:
         return response.text("All fields are required", status=400)
 
-    source = await SourceService.create(url=url, name=name)
+    source = await SourceService.create(url=url, name=name, only_related=only_related)
 
     if not source:
         return response.text("Source with this URL already exists", status=400)
@@ -266,77 +268,6 @@ async def podcasts_list(request):
     """Render podcasts list"""
     podcasts = await PodcastService.get_all()
     return await render("podcasts/list.html", context=inj({"podcasts": podcasts}))
-
-
-# Podcast statistics
-@bp.route("/podcasts/stats", methods=["GET"])
-async def podcasts_stats(request):
-    """Render podcast statistics"""
-    # Get basic counts
-    total_count = await PodcastService.count()
-    posted_count = await PodcastService.count(is_posted=True)
-    not_posted_count = await PodcastService.count(is_posted=False)
-
-    # Get counts by source
-    sources = await SourceService.get_all()
-    source_stats = []
-
-    for source in sources:
-        source_count = await PodcastService.count(source_id=source.id)
-        if source_count > 0:
-            source_stats.append(
-                {
-                    "source": source,
-                    "count": source_count,
-                    "posted_count": await PodcastService.count(
-                        source_id=source.id, is_posted=True
-                    ),
-                    "not_posted_count": await PodcastService.count(
-                        source_id=source.id, is_posted=False
-                    ),
-                }
-            )
-
-    # Get counts for recent months
-    today = datetime.now()
-    monthly_stats = []
-
-    for i in range(6):  # Last 6 months
-        month_start = datetime(today.year, today.month, 1) - timedelta(days=30 * i)
-        next_month = month_start.month + 1 if month_start.month < 12 else 1
-        next_month_year = (
-            month_start.year if month_start.month < 12 else month_start.year + 1
-        )
-        month_end = datetime(next_month_year, next_month, 1) - timedelta(days=1)
-
-        month_count = await PodcastService.count(
-            from_date=month_start, to_date=month_end
-        )
-
-        if month_count > 0:
-            monthly_stats.append(
-                {
-                    "month": month_start.strftime("%B %Y"),
-                    "count": month_count,
-                    "posted_count": await PodcastService.count(
-                        from_date=month_start, to_date=month_end, is_posted=True
-                    ),
-                    "not_posted_count": await PodcastService.count(
-                        from_date=month_start, to_date=month_end, is_posted=False
-                    ),
-                }
-            )
-
-    return await render(
-        "podcasts/stats.html",
-        context={
-            "total_count": total_count,
-            "posted_count": posted_count,
-            "not_posted_count": not_posted_count,
-            "source_stats": source_stats,
-            "monthly_stats": monthly_stats,
-        },
-    )
 
 
 @bp.route("/podcasts/activate/<podcast_id:int>", methods=["GET"])

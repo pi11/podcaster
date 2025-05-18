@@ -1,5 +1,5 @@
 """
-YouTube Channel to MP3 Downloader Script for GMP Podcast Manager
+YouTube Channel to MP3 Downloader Script for Podcast Manager
 This script fetches videos from YouTube channels stored in the database,
 converts them to MP3 format, and updates the database with the new podcasts.
 """
@@ -180,7 +180,12 @@ async def main() -> None:
     podcasts = await Podcast.filter(
         is_active=True, is_posted=False, is_processed=False, is_downloaded=True
     )
+
     for podcast in podcasts:
+
+        # first lets process categories
+        await PodcastService.add_categories(id=podcast.id)
+
         if podcast.filesize > MAX_AUDIO_SIZE:
             result = await compress_podcast(podcast)
             if result:
