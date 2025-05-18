@@ -17,6 +17,8 @@ from PIL import Image
 
 # App specific imports
 from app.models import Podcast
+from app.services import PodcastService
+from app.utils.helpers import init_db, close_db
 
 # Configure logging
 logging.basicConfig(
@@ -31,23 +33,6 @@ BASE_DIR = os.getcwd()
 OUTPUT_DIR = os.path.join(BASE_DIR, os.getenv("MEDIA_DIR", "media"))
 
 MAX_AUDIO_SIZE = 50 * 1000 * 1000  # about 50 Mb
-
-
-async def init_db():
-    """Initialize database connection"""
-    logger.info("Initializing database connection")
-
-    # Import your database configuration
-    from app.config import TORTOISE_ORM
-
-    await Tortoise.init(config=TORTOISE_ORM)
-    logger.info("Database connection established")
-
-
-async def close_db():
-    """Close database connection"""
-    logger.info("Closing database connection")
-    await Tortoise.close_connections()
 
 
 async def compress_podcast(
@@ -80,8 +65,6 @@ async def compress_podcast(
         "-i",
         input_path,
         "-y",
-        "-q:a",
-        "4",
         "-ac",
         "2",  # Ensure stereo
         "-c:a",

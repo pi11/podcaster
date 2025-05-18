@@ -12,7 +12,7 @@
                     <th>ID</th>
                     <th>Название</th>
                     <th>Урл</th>
-                    <th>Стата</th>
+                    <th>TG Канал</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -67,8 +67,31 @@
                        value="1800">
                   
                 </div>
+            <div class="form-group">
+                <label for="max_videos_per_channel">Максимум видосов с канала (глубина)</label>
+                <input type="text"
+                       id="max_videos_per_channel"
+                       name="max_videos_per_channel"
+                       value="15">
+                  
+                </div>
+
+                <div class="form-group">
+
+                <select id="tg_id" 
+                        name="tg_id" 
+                        required>
+                    <option value="">Выберете Tg канал</option>
+                    {% for tg in tgs %}
+                        <option value="{{ tg.id }}">{{ tg.name }}</option>
+                    {% endfor %}
+                </select>
+
+
+                  
                 <input type="checkbox" id="myCheckbox" name="only_related" value="check">
                   <label for="myCheckbox">Проверять видосы на соответствие категориям:</label>
+                </div>
 
             <div class="form-actions">
                 <button type="submit" class="btn">

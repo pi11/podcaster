@@ -26,7 +26,7 @@ from telegram import Update
 from app.models import Podcast, Category, CategoryIdentification
 from app.services import PodcastService, CategoryService, CategoryIdentificationService
 from app.config import TG_TOKEN, TG_CHANNEL
-from app.helpers.utils import close_db, init_db
+from app.utils.helpers import close_db, init_db
 
 # Configure logging
 logging.basicConfig(
@@ -86,11 +86,6 @@ async def post_command(update: Update, context: CallbackContext) -> None:
     """Post a specific podcast to the channel."""
     # Check if podcast_id is provided
 
-    channel_id = TG_CHANNEL
-    if not channel_id:
-        await update.message.reply_text("Error: Channel ID not configured.")
-        return
-
     try:
         await init_db()
 
@@ -100,7 +95,9 @@ async def post_command(update: Update, context: CallbackContext) -> None:
             await update.message.reply_text(f"No more podcast")
             return
         # Post to channel
-        success = await post_podcast_to_telegram(podcast, context.bot, channel_id)
+        source = await podcast.source
+        channel = await source.tg_channel
+        success = await post_podcast_to_telegram(podcast, context.bot, channel.tg_id)
 
         if success:
             # Update podcast status if it was successfully posted
@@ -141,21 +138,15 @@ async def post_podcast_to_telegram(podcast, bot, channel_id):
     else:
         print(f"Podcast: {podcast}")
     try:
-        # Get category name if available
-        category_name = None
-        if hasattr(podcast, "source") and hasattr(podcast.source, "category"):
-            category = await podcast.source.category
-            if category:
-                category_name = category.name
-
         # Format the message according to requirements
         message = f"{podcast.name}\nИсточник: {podcast.url}\n"
-
-        # Add category hashtag if available
-        if category_name:
+        cats = await podcast.categories
+        for i, cat in enumerate(cats):
             # Remove spaces and convert to lowercase for hashtag
-            hashtag = "#" + category_name.replace(" ", "").lower()
-            message += f"\n{hashtag}"
+            if i == 0:
+                message += "\n"
+            hashtag = "#" + cat.name.replace(" ", "").lower()
+            message += f"{hashtag} "
 
         with open(podcast.file, "rb") as audio:
             if os.path.exists(podcast.thumbnail):
@@ -179,6 +170,7 @@ async def post_podcast_to_telegram(podcast, bot, channel_id):
 
     except Exception as e:
         logger.error(f"Failed to post podcast to Telegram: {e}")
+        print(traceback.format_exc())
         return False
 
 

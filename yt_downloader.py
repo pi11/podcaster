@@ -192,7 +192,7 @@ async def process_channel(source):
             "--dump-json",
             "--flat-playlist",
             "--playlist-end",
-            str(MAX_VIDEOS_PER_CHANNEL),
+            str(source.max_videos_per_channel),
             source.url,
         ]
 

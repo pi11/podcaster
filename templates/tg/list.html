@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="">
+    <h1 class="">Телеграм каналы</h1>
+    <div>
+        <table>
+            <thead>
+                <tr class="bg-gray-100 text-gray-700">
+                    <th>ID</th>
+                    <th>Название</th>
+                    <th>ID</th>
+                    <th>Автопостинг</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="tg-table">
+              {% for tg in tgs %}
+              {% include "tg/row.html" %}
+              {% endfor %}
+            </tbody>
+        </table>
+      </div>
+
+
+
+    <div class="form-container" style="padding-top:20px;">
+        <h2 class="form-title">Добавление нового телеграм канала</h2>
+
+        <form hx-post="/tg"
+              hx-target="#tg-table"
+              hx-swap="beforeend"
+              hx-indicator="#submit-indicator">
+
+            <div class="form-group">
+                <label for="name">Название</label>
+                <input type="text"
+                       id="name"
+                       name="name"
+                       required
+                       placeholder="Название канала">
+            </div>
+
+            <div class="form-group">
+                <label for="id">ID</label>
+                <input type="text"
+                       id="id"
+                       name="id"
+                       required
+                       placeholder="ID канала...">
+            </div>
+
+                <input type="checkbox" id="myCheckbox" name="auto_post" value="check">
+                  <label for="myCheckbox">Автопостинг в канал:</label>
+
+            <div class="form-actions">
+                <button type="submit" class="btn">
+                    <span>Добавить TG канал</span>
+                </button>
+            </div>
+        </form>
+      </div>
+      
+{% endblock %}

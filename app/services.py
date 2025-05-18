@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from tortoise.exceptions import DoesNotExist, IntegrityError
 
-from app.models import Category, CategoryIdentification, Source, Podcast
+from app.models import Category, CategoryIdentification, Source, Podcast, TgChannel
 
 PUBLICATION_SPEED = 60 * 4  # 4 hourse
 
@@ -353,6 +353,47 @@ class PodcastService:
         try:
             podcast = await Podcast.get(id=id)
             await podcast.delete()
+            return True
+        except DoesNotExist:
+            return False
+
+
+class TgService:
+    """Service for source operations"""
+
+    @staticmethod
+    async def get_all() -> List[TgChannel]:
+        """Get all tgs"""
+        return await TgChannel.all()
+
+    @staticmethod
+    async def count() -> int:
+        """Get channels count"""
+        return await TgChannel.all().count()
+
+    @staticmethod
+    async def get_by_id(id: int) -> Optional[TgChannel]:
+        """Get tg by id"""
+        try:
+            return await TgChannel.get(id=id)
+        except DoesNotExist:
+            return None
+
+    @staticmethod
+    async def create(tg_id: str, name: str, auto_post: bool = False) -> TgChannel:
+        """Create new tg"""
+        try:
+            return await TgChannel.create(tg_id=tg_id, name=name, auto_post=auto_post)
+        except IntegrityError:
+            # Handle duplicate URL
+            return None
+
+    @staticmethod
+    async def delete(id: int) -> bool:
+        """Delete tg"""
+        try:
+            tg = await TgChannel.get(id=id)
+            await tg.delete()
             return True
         except DoesNotExist:
             return False

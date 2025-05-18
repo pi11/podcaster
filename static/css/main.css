@@ -211,7 +211,7 @@ tr:hover {
         }
 
         label {
-            display: block;
+            /*display: block;*/
             margin-bottom: 6px;
             font-weight: 500;
             font-size: 0.9rem;

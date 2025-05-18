@@ -11,6 +11,7 @@ from app.services import (
     CategoryIdentificationService,
     SourceService,
     PodcastService,
+    TgService,
 )
 from app.utils.helpers import inject_template_context as inj
 
@@ -54,7 +55,7 @@ async def categories_create(request):
         return response.text("Category name is required", status=400)
 
     try:
-        category = await CategoryService.create(name=name)
+        category = await CategoryService.create(name=name.lower())
         # If it's an HTMX request, return just the new row
         if request.headers.get("HX-Request"):
             return await render("categories/row.html", context={"category": category})
@@ -223,7 +224,10 @@ async def identifications_delete(request, identification_id):
 async def sources_list(request):
     """Render sources list"""
     sources = await SourceService.get_all()
-    return await render("sources/list.html", context=inj({"sources": sources}))
+    tgs = await TgService.get_all()
+    return await render(
+        "sources/list.html", context=inj({"sources": sources, "tgs": tgs})
+    )
 
 
 @bp.route("/sources", methods=["POST"])
@@ -231,14 +235,21 @@ async def sources_create(request):
     """Create new source"""
     url = request.form.get("url")
     name = request.form.get("name")
-    tg_channel = request.form.get("tg_channel")
-
-    only_related = request.form.get("only_related")
+    tg_channel = request.form.get("tg_id")
+    min_duration = request.form.get("min_duration", 1800)
+    max_videos_per_channel = request.form.get("max_videos_per_channel")
+    only_related = request.form.get("only_related", False)
 
     if not url or not name:
         return response.text("All fields are required", status=400)
 
-    source = await SourceService.create(url=url, name=name, only_related=only_related)
+    source = await SourceService.create(url=url, name=name)
+    if tg_channel:
+        source.tg_channel_id = int(tg_channel)
+    source.max_videos_per_channel = int(max_videos_per_channel)
+    source.only_related = only_related
+    source.min_duration = min_duration
+    await source.save()
 
     if not source:
         return response.text("Source with this URL already exists", status=400)
@@ -304,3 +315,45 @@ async def podcasts_delete(request, podcast_id):
         return response.text("Podcast not found"), 404
 
     return response.redirect("/podcasts")
+
+
+# TG routes
+@bp.route("/tg", methods=["GET"])
+async def tg_list(request):
+    """Render tg list"""
+    tgs = await TgService.get_all()
+    return await render("tg/list.html", context=inj({"tgs": tgs}))
+
+
+@bp.route("/tg", methods=["POST"])
+async def tg_create(request):
+    """Create new source"""
+    tg_id = request.form.get("id")
+    name = request.form.get("name")
+    auto_post = request.form.get("auto_post", False)
+
+    if not id or not name:
+        return response.text("All fields are required", status=400)
+
+    tg = await TgService.create(tg_id=tg_id, name=name, auto_post=auto_post)
+
+    if not tg:
+        return response.text("Tg with this ID already exists", status=400)
+
+    if request.headers.get("HX-Request"):
+        return await render("tg/row.html", context={"tg": tg})
+
+    return response.redirect("/tg")
+
+
+@bp.route("/tg/<tg_id:int>/delete", methods=["POST"])
+async def tg_delete(request, tg_id):
+    """Delete source"""
+    success = await TgService.delete(tg_id)
+
+    if request.headers.get("HX-Request"):
+        if success:
+            return response.text("")
+        return response.text("Tg not found"), 404
+
+    return response.redirect("/tg")

@@ -49,7 +49,7 @@ class TgChannel(models.Model):
     auto_post = fields.BooleanField(default=False)
 
     def __str__(self):
-        return self.tg_id
+        return self.name
 
     class Meta:
         table = "tgchannel"
@@ -68,6 +68,7 @@ class Source(models.Model):
     tg_channel = fields.ForeignKeyField(
         "models.TgChannel", related_name="tg_channel", null=True
     )
+    max_videos_per_channel = fields.IntField(default=15)
 
     def __str__(self):
         return self.url

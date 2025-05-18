@@ -1,0 +1,21 @@
+<tr id="tg-{{ tg.id }}">
+  <td>{{ tg.id }}</td>
+  <td>
+    {{ tg.name }}
+  </td>
+  <td>
+    {{ tg.tg_id }}
+  </td>
+  <td>
+    {{ tg.auto_post }}
+  </td>
+  <td>
+    <button hx-post="/tg/{{ tg.id }}/delete"
+            hx-confirm="Are you sure you want to delete this channel?"
+            hx-target="#tg-{{ tg.id }}"
+            hx-swap="outerHTML"
+            class="btn">
+      Delete
+    </button>
+  </td>
+</tr>

@@ -26,6 +26,9 @@ async def main() -> None:
     podcasts = await Podcast.filter(is_active=True)
     logger.info(f"Processing categories for {len(podcasts)} active podcasts")
     for podcast in podcasts:
+        source = await podcast.source
+        channel_id = await source.tg_channel
+        print(channel_id.tg_id)
         await PodcastService.add_categories(id=podcast.id)
         print(f"{podcast.name} cats processed!")
 
