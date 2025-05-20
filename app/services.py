@@ -6,7 +6,14 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from tortoise.exceptions import DoesNotExist, IntegrityError
 
-from app.models import Category, CategoryIdentification, Source, Podcast, TgChannel
+from app.models import (
+    Category,
+    CategoryIdentification,
+    Source,
+    Podcast,
+    TgChannel,
+    BannedWords,
+)
 
 PUBLICATION_SPEED = 60 * 4  # 4 hourse
 
@@ -432,6 +439,64 @@ class TgService:
         try:
             tg = await TgChannel.get(id=id)
             await tg.delete()
+            return True
+        except DoesNotExist:
+            return False
+
+
+class BannedWordsService:
+    """Service for bannedword operations"""
+
+    @staticmethod
+    async def get_all(order_by: str = "-id") -> List[BannedWords]:
+        """Get all bannedwords"""
+        return await BannedWords.all().order_by(order_by)
+
+    @staticmethod
+    async def count() -> int:
+        """Get channels count"""
+        return await BannedWords.all().count()
+
+    @staticmethod
+    async def get_by_id(id: int) -> Optional[BannedWords]:
+        """Get bannedword by id"""
+        try:
+            return await BannedWords.get(id=id)
+        except DoesNotExist:
+            return None
+
+    @staticmethod
+    async def create(url: str, name: str, only_related: bool = False) -> BannedWords:
+        """Create new bannedword"""
+        try:
+            return await BannedWords.create(
+                url=url, name=name, only_related=only_related
+            )
+        except IntegrityError:
+            # Handle duplicate URL
+            return None
+
+    @staticmethod
+    async def update(id: int, url: str, name: str) -> Optional[BannedWords]:
+        """Update bannedword"""
+        try:
+            bannedword = await BannedWords.get(id=id)
+            bannedword.url = url
+            bannedword.name = name
+            await bannedword.save()
+            return bannedword
+        except DoesNotExist:
+            return None
+        except IntegrityError:
+            # Handle duplicate URL
+            return None
+
+    @staticmethod
+    async def delete(id: int) -> bool:
+        """Delete bannedword"""
+        try:
+            bannedword = await BannedWords.get(id=id)
+            await bannedword.delete()
             return True
         except DoesNotExist:
             return False

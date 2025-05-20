@@ -140,7 +140,7 @@ async def post_podcast_to_telegram(podcast, bot, channel_id):
         cats = await podcast.categories
         source = await podcast.source
         message += "\n"
-        hashtag = "#" + source.name.replace(" ", "").lower()
+        hashtag = "#" + source.name.replace(" ", "").replace("'", "").lower()
         message += f"{hashtag} "
         for i, cat in enumerate(cats):
             # Remove spaces and convert to lowercase for hashtag

@@ -39,7 +39,10 @@ MAX_AUDIO_SIZE = 50 * 1000 * 1000  # about 50 Mb
 
 async def compress_podcast(
     podcast: Podcast,
-    bitrate: Literal["64k", "32k", "16k"] = "64k",
+    bitrate: Literal[
+        "64k",
+        "32k",
+    ] = "64k",
     codec_format: Literal["libmp3lame", "libopus"] = "libmp3lame",
 ) -> bool:
     """
@@ -91,15 +94,12 @@ async def compress_podcast(
     print(f"Compressed size is too big: {new_size}, lets try another params")
     if codec_format == "libmp3lame":
         if bitrate == "64k":
-            bitrate = "32k"
-        else:
             codec_format = "libopus"
     else:
         if bitrate == "64k":
             bitrate = "32k"
         elif bitrate == "32k":
-            bitrate = "16k"  # minimum bitrate =(
-        else:  # can't do anything
+            # can't do anything
             return False
 
     print(

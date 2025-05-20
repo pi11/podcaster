@@ -2,6 +2,7 @@
 
 from sanic import Blueprint, response
 from sanic_ext import render
+from sanic.response import file_stream
 from tortoise.exceptions import DoesNotExist, IntegrityError
 from datetime import datetime
 
@@ -392,3 +393,20 @@ async def tg_delete(request, tg_id):
         return response.text("Tg not found"), 404
 
     return response.redirect("/tg")
+
+
+@bp.route("/podcasts/stream/<podcast_id:int>", methods=["GET"])
+async def stream_podcast(request, podcast_id: int):
+    podcast = await PodcastService.get_by_id(podcast_id)
+    if not podcast:
+        return response.redirect("/podcasts")
+
+    filename = podcast.file
+
+    headers = {
+        "Content-Type": "audio/mpeg",
+        "Content-Disposition": f"inline; filename={filename}",
+    }
+
+    # Stream the file
+    return await file_stream(filename, headers=headers, chunk_size=1024)

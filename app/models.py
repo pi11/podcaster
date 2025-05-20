@@ -42,6 +42,19 @@ class CategoryIdentification(models.Model):
         table = "category_identification"
 
 
+class BannedWords(models.Model):
+    """Banned words"""
+
+    id = fields.IntField(pk=True)
+    name = fields.CharField(max_length=100)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        table = "banned_words"
+
+
 class TgChannel(models.Model):
     id = fields.IntField(pk=True)
     name = fields.CharField(max_length=100)
@@ -107,6 +120,7 @@ class Podcast(models.Model):
     thumbnail = fields.CharField(max_length=200, null=True)
 
     bitrate = fields.CharField(max_length=10, null=True)
+    duration = fields.IntField(null=True)
 
     def __str__(self):
         return self.url
@@ -116,6 +130,16 @@ class Podcast(models.Model):
 
     def get_size_mb(self):
         return f"{self.filesize / 1000 / 1000:.2f} MB"
+
+    def get_size_mb_int(self):
+        return self.filesize / 1000 / 1000
+
+    def get_time(self):
+        seconds = self.duration or 0
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        remaining_seconds = seconds % 60
+        return f"{hours}:{minutes}:{remaining_seconds}"
 
     class Meta:
         table = "podcast"

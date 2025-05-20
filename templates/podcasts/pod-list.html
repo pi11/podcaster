@@ -11,21 +11,34 @@
   </thead>
   <tbody>
     {% for p in podcasts %}
-    <tr>
+    <tr {% if  p.get_size_mb_int() > 49 %}style="background-color: rgba(125, 0, 0, 0.1);"{% endif %}>
       <td>{{ p.id }}</td>
       <td>{{ p.name }}
       <br />
       {% if p.thumbnail_url %}
-      <a target="_blank" href="{{ p.url }}"><img src="{{ p.thumbnail_url }}" width="250px;"/></a>
-      <br />
-      {{ p.get_size_mb() }}
+      <a target="_blank" href="{{ p.url }}"><img src="{{ p.thumbnail_url }}" width="100%"/></a>
       {% endif %}
+      <br />
+      {{ p.get_size_mb() }} {% if p.bitrate %}{{ p.bitrate }} kbps{% endif %}
+      {{ p.get_time() }}
       <br />
       {% for c in  p.categories %}
        #{{ c }}
-      {% endfor %}
+       {% endfor %}
+       
+       {% if p.is_processed %}
+       <audio controls preload="none">
+         <source src="/podcasts/stream/{{ p.id }}" type="audio/mpeg">
+           Your browser does not support the audio element.
+       </audio>
+       {% endif %}
       </td>
-      <td><a href="/podcasts?tg_id={{ p.source.tg_channel.id }}">{{ p.source.tg_channel }}</a></td>
+      <td>
+        <a href="/podcasts?tg_id={{ p.source.tg_channel.id }}">{{ p.source.tg_channel }}</a>
+        <br />
+        {{ p.source.name }}
+
+      </td>
        <td title="{{ p.publication_date }}">{{ p.get_date() }}</td>
       <td>
         {% if p.is_downloaded %}<span class="status active">🟢 Скачан</span>{% else %}<span class="status inactive">🔴&nbsp;Не&nbsp;скачан</span>{% endif %}

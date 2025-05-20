@@ -18,7 +18,7 @@ import yt_dlp
 
 # App specific imports
 from app.models import Source, Podcast
-from app.services import SourceService, PodcastService
+from app.services import SourceService, PodcastService, BannedWordsService
 from app.utils.helpers import close_db, init_db
 
 # Configure logging
@@ -175,6 +175,7 @@ async def process_channel(source):
             print("Error extracting video info")
             return {"error": str(e)}
 
+    banned_words = await BannedWordsService.get_all()
     try:
         logger.info(f"Processing channel: {source.name} ({source.url})")
 
@@ -217,7 +218,9 @@ async def process_channel(source):
                 if duration > source.max_duration:
                     logger.info(f"Video duration {duration} > max duration for channel")
                     continue
-
+                for bn in banned_words:
+                    if bn.name.lower() in video_info["title"].lower():
+                        print(f"Banned word: {bn.name}, skipping video")
                 # Check if this video already exists in our database
                 podcast = await Podcast.filter(yt_id=video["id"]).first()
                 if podcast:
@@ -241,6 +244,7 @@ async def process_channel(source):
                         "publication_date": nd,
                         "is_processed": False,
                         "file": None,
+                        "duration": video_info.get("duration"),
                         "is_posted": False,  # Set to False by default, can be activated later
                         "thumbnail_url": video_info.get("thumbnail", ""),
                     }
