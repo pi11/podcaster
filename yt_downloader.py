@@ -210,8 +210,8 @@ async def process_channel(source):
                 video_info = get_video_info(video_url)
 
                 logger.info(f"Processing video: {video_url}")
-
-                if video_info.get("duration") < source.min_duration:
+                duration = video_info.get("duration")
+                if duration < source.min_duration:
                     logger.info(f"Video duration {duration} < min duration for channel")
                     continue
 
@@ -246,10 +246,16 @@ async def process_channel(source):
                 if source.only_related:
                     # check if video related to one of the categories
                     logger.info("Check if podcast related to themes")
-                    PodcastService.check_theme(id=podcast.id)
+                    good = await PodcastService.check_theme(id=podcast.id)
+                else:
+                    good = True
 
-                # Download the video as MP3
-                downloaded = download_audio(video_url, channel_dir)
+                if good:
+                    # Download the video as MP3
+                    downloaded = download_audio(video_url, channel_dir)
+                else:
+                    downloaded = False
+
                 if downloaded:
                     logger.info(f"File downloaded: {downloaded['file_path']}")
                     filesize = os.path.getsize(downloaded.get("file_path", 0))
@@ -267,7 +273,7 @@ async def process_channel(source):
                     podcast.is_downloaded = True
                     await podcast.save()
                 else:
-                    logger.error(f"Download failed")
+                    logger.error(f"Download failed or skiped")
 
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to get videos from {source.name}: {e}")

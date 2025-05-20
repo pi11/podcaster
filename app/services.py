@@ -184,6 +184,30 @@ class PodcastService:
         )
 
     @staticmethod
+    async def get_relevant(tg_id) -> List[Podcast]:
+        """Get podcasts ready for posting"""
+        return await Podcast.filter(
+            source__tg_channel__id=tg_id,
+            is_active=True,
+            is_posted=False,
+            is_processed=True,
+        ).order_by("publication_date")
+
+    @staticmethod
+    async def get_post() -> List[Podcast]:
+        """Get podcasts ready for posting"""
+        return (
+            await Podcast.filter(
+                is_active=True,
+                is_posted=False,
+                is_processed=True,
+                is_awaiting_post=True,
+            )
+            .order_by("publication_date")
+            .first()
+        )
+
+    @staticmethod
     async def check_theme(id: int) -> bool:
         """Check if podcast has related themes
         and disable if no
@@ -198,6 +222,9 @@ class PodcastService:
                 await podcast.categories.add(cat)
                 print(f"Added cat {cat} to {podcast.name}")
                 good = True
+
+        if not good:
+            print("Podcast is not related to themes")
         podcast.is_active = good
         await podcast.save()
         return good
@@ -228,7 +255,7 @@ class PodcastService:
         """Get recent podcasts"""
         return (
             await Podcast.all()
-            .order_by("-publication_date")
+            .order_by("-created_at")
             .limit(limit)
             .prefetch_related("categories")
         )
@@ -331,6 +358,17 @@ class PodcastService:
         try:
             podcast = await Podcast.get(id=id)
             podcast.is_active = True
+            await podcast.save()
+            return podcast
+        except DoesNotExist:
+            return None
+
+    @staticmethod
+    async def mark_for_post(id: int) -> Optional[Podcast]:
+        """Mark podcast for posting"""
+        try:
+            podcast = await Podcast.get(id=id)
+            podcast.is_awaiting_post = True
             await podcast.save()
             return podcast
         except DoesNotExist:

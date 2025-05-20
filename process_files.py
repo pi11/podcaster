@@ -5,6 +5,7 @@ converts them to MP3 format, and updates the database with the new podcasts.
 """
 
 import os
+import time
 import logging
 import asyncio
 import subprocess
@@ -159,6 +160,7 @@ async def embed_metadata(podcast):
 
 
 async def main() -> None:
+
     await init_db()
     podcasts = await Podcast.filter(
         is_active=True, is_posted=False, is_processed=False, is_downloaded=True
@@ -187,7 +189,11 @@ async def main() -> None:
 
 if __name__ == "__main__":
     logger.info("Starting MP3 processor")
-
-    asyncio.run(main())
+    try:
+        while True:
+            asyncio.run(main())
+            time.sleep(20)
+    except KeyboardInterrupt:
+        print("\nProgramm stopped by user.")
 
     logger.info("All files proccessed")

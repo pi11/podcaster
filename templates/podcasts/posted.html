@@ -1,0 +1,10 @@
+{% if p.is_posted %}
+Загружен в TG!
+{% else %}
+<div id="updates-container" style="margin-top:5px;"
+         hx-get="/podcasts/status/{{ p.id }}"
+         hx-trigger="every 2s"
+         hx-swap="innerHTML">
+         📤 Загружаем ...
+</div>
+{% endif %}

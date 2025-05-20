@@ -4,14 +4,14 @@
                             {{ source.name }}
                         </td>
                         <td>
-                            <span id="source-url-{{ source.id }}">
+                            <span id="source-url-{{ source.id }}" style="max-width:400px; overflow: hidden; display: flex;">
                                 <a href="{{ source.url }}" target="_blank" class="text-blue-600 hover:underline truncate block max-w-xs">
                                     {{ source.url }}
                                 </a>
                             </span>
                           </td>
                           <td>
-                            {{ source.tg_channel }}
+                            <a href="/podcasts?tg_id={{ source.tg_channel.id }}">{{ source.tg_channel }}</a>
                           </td>
                         <td>
                                 <button hx-post="/sources/{{ source.id }}/delete"

@@ -7,7 +7,7 @@ import os
 import logging
 import traceback
 import asyncio
-import datetime
+from datetime import datetime
 import json
 from tortoise import Tortoise
 import telegram
@@ -82,7 +82,7 @@ async def status_command(update: Update, context: CallbackContext) -> None:
         await close_db()
 
 
-async def post_command(update: Update, context: CallbackContext) -> None:
+async def post_telegram(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Post a specific podcast to the channel."""
     # Check if podcast_id is provided
 
@@ -90,9 +90,9 @@ async def post_command(update: Update, context: CallbackContext) -> None:
         await init_db()
 
         # Get the podcast
-        podcast = await PodcastService.get_good()  # ready for posting podcasts
+        podcast = await PodcastService.get_post()  # ready for posting podcasts
         if not podcast:
-            await update.message.reply_text(f"No more podcast")
+            print("No podcasts for posting, skip for now")
             return
         # Post to channel
         source = await podcast.source
@@ -105,18 +105,15 @@ async def post_command(update: Update, context: CallbackContext) -> None:
                 podcast.is_posted = True
                 await podcast.save()
 
-            await update.message.reply_text(
-                f"Podcast '{podcast.name}' posted to channel successfully."
-            )
+                print(f"Podcast '{podcast.name}' posted to channel successfully.")
+
         else:
-            await update.message.reply_text(
-                f"Failed to post podcast '{podcast.name}' to channel."
-            )
+            print(f"Failed to post podcast '{podcast.name}' to channel.")
 
     except Exception as e:
         logger.error(f"Error in post command: {e}")
         print(traceback.format_exc())
-        await update.message.reply_text(f"Error posting podcast: {str(e)}")
+        print(f"Error posting podcast: {str(e)}")
     finally:
         await close_db()
 
@@ -165,6 +162,7 @@ async def post_podcast_to_telegram(podcast, bot, channel_id):
             )
         logger.info(f"Posted podcast '{podcast.name}' to Telegram channel")
         podcast.is_posted = True
+        podcast.publication_date = datetime.now()
         await podcast.save()
         return True
 
@@ -205,11 +203,14 @@ def main():
     # Add command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("status", status_command))
-    application.add_handler(CommandHandler("post", post_command))
+    # application.add_handler(CommandHandler("status", status_command))
+    # application.add_handler(CommandHandler("post", post_command))
 
     # Add error handler
     application.add_error_handler(error_handler)
+
+    job_queue = application.job_queue
+    job_minute = job_queue.run_repeating(post_telegram, interval=30, first=10)
 
     # Start the Bot
     logger.info("Starting Telegram Bot")

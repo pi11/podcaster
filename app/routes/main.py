@@ -22,6 +22,7 @@ bp = Blueprint("main", url_prefix="/")
 async def index(request):
     """Render index page"""
     recent_podcasts = await PodcastService.get_recent(limit=25)
+    tg_count = await TgService.count()
     podcasts_count = await PodcastService.count()
     categories_count = await CategoryService.count()
     channels_count = await SourceService.count()
@@ -33,6 +34,7 @@ async def index(request):
                 "categories_count": categories_count,
                 "podcasts_count": podcasts_count,
                 "channels_count": channels_count,
+                "tg_count": tg_count,
             }
         ),
     )
@@ -277,8 +279,15 @@ async def sources_delete(request, source_id):
 @bp.route("/podcasts", methods=["GET"])
 async def podcasts_list(request):
     """Render podcasts list"""
-    podcasts = await PodcastService.get_all()
-    return await render("podcasts/list.html", context=inj({"podcasts": podcasts}))
+
+    tg_id = int(request.args.get("tg_id", 0))
+    if tg_id:
+        podcasts = await PodcastService.get_relevant(tg_id)
+    else:
+        podcasts = await PodcastService.get_all()
+    return await render(
+        "podcasts/list.html", context=inj({"podcasts": podcasts, "tg_id": tg_id})
+    )
 
 
 @bp.route("/podcasts/activate/<podcast_id:int>", methods=["GET"])
@@ -291,6 +300,32 @@ async def podcasts_activate(request, podcast_id):
     await PodcastService.activate(id=podcast.id)
 
     return await render("podcasts/activated.html", context={"p": podcast})
+
+
+@bp.route("/podcasts/post/<podcast_id:int>", methods=["GET"])
+async def podcasts_post(request, podcast_id):
+    """Mark podcast for posting"""
+    podcast = await PodcastService.get_by_id(podcast_id)
+    if not podcast:
+        return response.redirect("/podcasts")
+
+    await PodcastService.mark_for_post(id=podcast.id)
+
+    return await render("podcasts/posted.html", context={"p": podcast})
+
+
+@bp.route("/podcasts/status/<podcast_id:int>", methods=["GET"])
+async def podcasts_status(request, podcast_id):
+    """Get posting status"""
+    podcast = await PodcastService.get_by_id(podcast_id)
+    if not podcast:
+        return response.redirect("/podcasts")
+    return await render(
+        "podcasts/posted.html",
+        context={
+            "p": podcast,
+        },
+    )
 
 
 @bp.route("/podcasts/deactivate/<podcast_id:int>", methods=["GET"])

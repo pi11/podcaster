@@ -29,12 +29,15 @@ async def main() -> None:
     async with in_transaction():
         podcasts = await Podcast.filter(
             is_active=True, is_posted=False  # , is_downloaded=True
-        )
+        ).prefetch_related("source")
         n = datetime.now()
         for podcast in podcasts:
             podcast.publication_date = n
             await podcast.save()
             # set currrent date
+            if podcast.source.only_related:
+                print("Check related")
+                await PodcastService.check_theme(id=podcast.id)
 
         podcasts = (
             await Podcast.filter(is_active=True, is_posted=False, is_downloaded=True)

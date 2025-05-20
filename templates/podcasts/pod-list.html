@@ -3,6 +3,7 @@
     <tr>
       <th>ID</th>
       <th>Название</th>
+      <th>TG Канал</th>
       <th>Дата</th>
       <th>Статус</th>
       <th>Действия</th>
@@ -15,18 +16,18 @@
       <td>{{ p.name }}
       <br />
       {% if p.thumbnail_url %}
-      <a target="_blank" href="{{ p.url }}"><img src="{{ p.thumbnail_url }}" width="300px;"/></a>
+      <a target="_blank" href="{{ p.url }}"><img src="{{ p.thumbnail_url }}" width="250px;"/></a>
       {% endif %}
       <br />
       {% for c in  p.categories %}
        #{{ c }}
       {% endfor %}
       </td>
+      <td><a href="/podcasts?tg_id={{ p.source.tg_channel.id }}">{{ p.source.tg_channel }}</a></td>
        <td title="{{ p.publication_date }}">{{ p.get_date() }}</td>
       <td>
         {% if p.is_downloaded %}<span class="status active">🟢 Скачан</span>{% else %}<span class="status inactive">🔴&nbsp;Не&nbsp;скачан</span>{% endif %}
         {% if p.is_processed %}<span class="status active">🟢&nbsp;Обработан</span>{% else %}<span class="status inactive">🔴&nbsp;Не&nbsp;обработан</span>{% endif %}
-        {% if p.is_posted %}<span class="status active">🟢&nbsp;Загружен в TG</span>{% else %}<span class="status inactive">🔴&nbsp;Не&nbsp;загружен в TG</span>{% endif %}
         
         
       </td>
@@ -36,7 +37,22 @@
         {% else %}
         {% include "podcasts/deactivated.html" %}
         {% endif %}
-        
+        <br />
+        {% if p.is_posted %}
+        <span style="line-height: 3; " class="status active">🟢&nbsp;Загружен в TG</span>
+        {% else %}
+          {% if p.is_awaiting_post %}
+          {% include "podcasts/posted.html" %}
+          {% else %}
+
+          {% if not p.is_posted %}
+          <span style="line-height: 3; " class="status inactive">🔴&nbsp;Не&nbsp;загружен&nbsp;в&nbsp;TG</span>
+          {% endif %}
+          
+          <button hx-swap="outerHTML" hx-get="/podcasts/post/{{ p.id }}" class="button">Загрузить в TG</button>
+          
+          {% endif %}
+        {% endif %}
       </td>
     </tr>
     {% endfor %}
