@@ -114,9 +114,9 @@ class SourceService:
     """Service for source operations"""
 
     @staticmethod
-    async def get_all() -> List[Source]:
+    async def get_all(order_by: str = "-id") -> List[Source]:
         """Get all sources"""
-        return await Source.all()
+        return await Source.all().order_by(order_by)
 
     @staticmethod
     async def count() -> int:

@@ -214,6 +214,9 @@ async def process_channel(source):
                 if duration < source.min_duration:
                     logger.info(f"Video duration {duration} < min duration for channel")
                     continue
+                if duration > source.max_duration:
+                    logger.info(f"Video duration {duration} > max duration for channel")
+                    continue
 
                 # Check if this video already exists in our database
                 podcast = await Podcast.filter(yt_id=video["id"]).first()

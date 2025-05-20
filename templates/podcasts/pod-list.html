@@ -17,6 +17,8 @@
       <br />
       {% if p.thumbnail_url %}
       <a target="_blank" href="{{ p.url }}"><img src="{{ p.thumbnail_url }}" width="250px;"/></a>
+      <br />
+      {{ p.get_size_mb() }}
       {% endif %}
       <br />
       {% for c in  p.categories %}

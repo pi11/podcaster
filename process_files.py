@@ -10,6 +10,7 @@ import logging
 import asyncio
 import subprocess
 from tortoise import Tortoise
+import mutagen
 from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, APIC, error
 from mutagen.id3 import TIT2, TALB  # Optional: Title, Album
@@ -85,7 +86,7 @@ async def compress_podcast(
     new_size = os.path.getsize(output_path)
     if new_size < MAX_AUDIO_SIZE:
         print(f"Compressed from {podcast.filesize} to {new_size} (keep mp3)")
-        return {"file": output_path, "size": new_size}
+        return {"file": output_path, "size": new_size, "bitrate": bitrate}
 
     print(f"Compressed size is too big: {new_size}, lets try another params")
     if codec_format == "libmp3lame":
@@ -125,7 +126,12 @@ async def embed_metadata(podcast):
 
     # if path.endswith(".mp3"): # good its mp3 file
 
-    audio = MP3(path, ID3=ID3)
+    try:
+        audio = MP3(path, ID3=ID3)
+    except mutagen.mp3.HeaderNotFoundError:  # opus?
+        print("Can't add mp3 tags, skip")
+
+        return
 
     # If it doesn't have ID3 tag, add it
     try:
@@ -177,6 +183,7 @@ async def main() -> None:
                 print("Podcast compressed")
                 podcast.file = result["file"]
                 podcast.filesize = result["size"]
+                podcast.bitrate = result["bitrate"]
                 await podcast.save()
 
         await embed_metadata(podcast)

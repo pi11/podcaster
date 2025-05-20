@@ -62,6 +62,8 @@ class Source(models.Model):
     url = fields.CharField(max_length=500, unique=True)
     name = fields.CharField(max_length=200)
     min_duration = fields.IntField(default=0)
+    max_duration = fields.IntField(default=10800)
+
     only_related = fields.BooleanField(
         default=False
     )  # if set, load only videos with related categories found
@@ -104,11 +106,16 @@ class Podcast(models.Model):
     thumbnail_url = fields.CharField(max_length=512, null=True)
     thumbnail = fields.CharField(max_length=200, null=True)
 
+    bitrate = fields.CharField(max_length=10, null=True)
+
     def __str__(self):
         return self.url
 
     def get_date(self):
         return humanizeTimeDiff(self.publication_date)
+
+    def get_size_mb(self):
+        return f"{self.filesize / 1000 / 1000:.2f} MB"
 
     class Meta:
         table = "podcast"
