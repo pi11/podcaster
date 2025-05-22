@@ -61,8 +61,18 @@ class TgChannel(models.Model):
     tg_id = fields.CharField(max_length=30, unique=True)
     auto_post = fields.BooleanField(default=False)
 
+    # message_template = fields.CharField(max_length=250, default="{{ title }}\nИсточник: {{ url }}\n")
     def __str__(self):
         return self.name
+
+    async def count(self):
+        count = 0
+        sources = await Source.filter(tg_channel=self.id)
+        for source in sources:
+            count += await Podcast.filter(
+                source=source, is_active=True
+            ).count()  # await source.count()
+        return count
 
     class Meta:
         table = "tgchannel"
@@ -84,6 +94,8 @@ class Source(models.Model):
         "models.TgChannel", related_name="tg_channel", null=True
     )
     max_videos_per_channel = fields.IntField(default=15)
+
+    extract_tags = fields.BooleanField(default=False)
 
     def __str__(self):
         return self.url

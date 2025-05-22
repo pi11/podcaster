@@ -26,7 +26,7 @@ from telegram import Update
 from app.models import Podcast, Category, CategoryIdentification
 from app.services import PodcastService, CategoryService, CategoryIdentificationService
 from app.config import TG_TOKEN, TG_CHANNEL
-from app.utils.helpers import close_db, init_db
+from app.utils.helpers import close_db, init_db, extract_hashtags
 
 # Configure logging
 logging.basicConfig(
@@ -136,16 +136,23 @@ async def post_podcast_to_telegram(podcast, bot, channel_id):
         print(f"Podcast: {podcast}")
     try:
         # Format the message according to requirements
-        message = f"{podcast.name}\nИсточник: {podcast.url}\n"
+        message = f"{podcast.name}\n{podcast.url}\n"
         cats = await podcast.categories
         source = await podcast.source
         message += "\n"
         hashtag = "#" + source.name.replace(" ", "").replace("'", "").lower()
         message += f"{hashtag} "
-        for i, cat in enumerate(cats):
-            # Remove spaces and convert to lowercase for hashtag
-            hashtag = "#" + cat.name.replace(" ", "").lower()
-            message += f"{hashtag} "
+
+        hashtags = [c.name.replace(" ", "").lower().strip() for c in cats]
+        if source.extract_tags:
+            # also extract tags from description
+            hashtags += extract_hashtags(podcast.description)
+
+        proc_hashtags = [h.lower().strip() for h in hashtags]
+        hashtags = list(set(proc_hashtags))
+
+        for hashtag in hashtags:
+            message += f"#{hashtag.lower()} "
 
         with open(podcast.file, "rb") as audio:
             if os.path.exists(podcast.thumbnail):

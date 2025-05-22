@@ -80,11 +80,11 @@ def download_audio(video_url, output_path):
             upload_date = datetime.datetime.now()
 
         # Check if video is too old
-        if (datetime.datetime.now() - upload_date) > timedelta(days=MAX_VIDEO_AGE_DAYS):
-            logger.info(
-                f"Skipping video {video_info.get('title')} - too old ({upload_date.strftime('%Y-%m-%d')})"
-            )
-            return None
+        # if (datetime.datetime.now() - upload_date) > timedelta(days=MAX_VIDEO_AGE_DAYS):
+        #     logger.info(
+        #         f"Skipping video {video_info.get('title')} - too old ({upload_date.strftime('%Y-%m-%d')})"
+        #     )
+        #     return None
 
         # Download command
         cmd = [
@@ -218,9 +218,14 @@ async def process_channel(source):
                 if duration > source.max_duration:
                     logger.info(f"Video duration {duration} > max duration for channel")
                     continue
+
+                bad = False
                 for bn in banned_words:
                     if bn.name.lower() in video_info["title"].lower():
                         print(f"Banned word: {bn.name}, skipping video")
+                        bad = True
+                if bad:
+                    continue
                 # Check if this video already exists in our database
                 podcast = await Podcast.filter(yt_id=video["id"]).first()
                 if podcast:

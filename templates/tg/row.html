@@ -1,10 +1,12 @@
 <tr id="tg-{{ tg.id }}">
   <td>{{ tg.id }}</td>
   <td>
-        <a href="/podcasts?tg_id={{ tg.id }}">{{ tg.name }}</a>
+    {{ tg.name }}
+    <a href="/podcasts?tg_id={{ tg.id }}">({{ tg.count() }})</a>
+
   </td>
   <td>
-{{ tg.tg_id }}
+    {{ tg.tg_id }}
   </td>
   <td>
     {{ tg.auto_post }}

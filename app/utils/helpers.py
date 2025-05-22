@@ -1,5 +1,6 @@
 """Misc helpers"""
 
+import re
 import logging
 from tortoise import Tortoise
 
@@ -100,3 +101,9 @@ def humanizeTimeDiff(timestamp=None):
         return format_phrase(seconds, ("секунда", "секунды", "секунд"))
     else:
         return "Только что"
+
+
+def extract_hashtags(text):
+    # Find all words starting with # using regex
+    hashtags = re.findall(r"#(\w+)", text)
+    return hashtags
