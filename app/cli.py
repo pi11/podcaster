@@ -32,7 +32,7 @@ from app.utils.helpers import init_db, close_db
 BASE_DIR = os.getcwd()
 OUTPUT_DIR = os.path.join(BASE_DIR, os.getenv("MEDIA_DIR", "media"))
 MAX_AUDIO_SIZE = 50 * 1000 * 1000  # about 50 Mb
-MAX_VIDEOS_PER_CHANNEL = 10
+MAX_VIDEOS_PER_CHANNEL = 20
 MAX_VIDEO_AGE_DAYS = 1400
 DOWNLOAD_AUDIO_QUALITY = "64"
 
@@ -305,46 +305,6 @@ def delete(podcast_id: int, force: bool):
     asyncio.run(_delete())
 
 
-@cli.command("list-inactive")
-@click.option(
-    "--downloaded-only",
-    is_flag=True,
-    help="Show only inactive podcasts that are downloaded",
-)
-def list_inactive(downloaded_only: bool):
-    """List all inactive podcasts."""
-
-    async def _list_inactive():
-        await init_db()
-
-        try:
-            filters = {"is_active": False}
-            if downloaded_only:
-                filters["is_downloaded"] = True
-
-            podcasts = await Podcast.filter(**filters)
-
-            if not podcasts:
-                status = "downloaded " if downloaded_only else ""
-                click.echo(f"✅ No inactive {status}podcasts found.")
-                return
-
-            click.echo(f"📋 Inactive Podcasts ({len(podcasts)} found)")
-            click.echo("-" * 50)
-
-            for podcast in podcasts:
-                status = "⬇️" if podcast.is_downloaded else "⭕"
-                click.echo(f"{status} [{podcast.id}] {podcast.name}")
-
-        except Exception as e:
-            click.echo(f"❌ Error: {e}", err=True)
-            raise
-        finally:
-            await close_db()
-
-    asyncio.run(_list_inactive())
-
-
 @cli.command()
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
 @click.option("--active-only", is_flag=True, help="Process only active podcasts")
@@ -584,7 +544,6 @@ def set_dates(verbose: bool, current_date: bool):
 
 @cli.command("download")
 @click.option("--source-id", type=int, help="Download from specific source ID only")
-@click.option("--max-videos", type=int, default=10, help="Maximum videos per channel")
 @click.option("--quality", default="64", help="Audio quality in kbps")
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
 @click.option(
@@ -592,7 +551,6 @@ def set_dates(verbose: bool, current_date: bool):
 )
 def download_youtube(
     source_id: Optional[int],
-    max_videos: int,
     quality: str,
     verbose: bool,
     dry_run: bool,
@@ -620,7 +578,7 @@ def download_youtube(
                     click.echo(f"❌ Source with ID {source_id} not found.")
                     return
             else:
-                sources = await SourceService.get_all()
+                sources = await SourceService.get_all("id")
 
             if not sources:
                 click.echo("❌ No sources found.")
@@ -641,7 +599,7 @@ def download_youtube(
 
                     click.echo(f"📺 Processing: {source.name}")
                     downloaded_count = await process_channel_download(
-                        source, max_videos, quality, verbose, logger
+                        source, source.max_videos_per_channel, quality, verbose, logger
                     )
                     total_downloaded += downloaded_count
 
@@ -833,8 +791,11 @@ async def process_channel_download(
                 if not await PodcastService.check_theme(id=podcast.id):
                     continue
 
-            # Download
-            downloaded = download_audio(video_url, channel_dir, quality)
+            if podcast.is_active:
+                # Download
+                downloaded = download_audio(video_url, channel_dir, quality)
+            else:
+                downloaded = False
             if downloaded:
                 # Download thumbnail
                 thumbnail_path = f"{downloaded.get('file_path')}-thumb.jpg"
