@@ -374,13 +374,7 @@ def add_categories(verbose: bool, active_only: bool):
     default=True,
     help="Enable or disable compression for large files",
 )
-@click.option(
-    "--bitrate",
-    type=click.Choice(["64k", "32k"]),
-    default="64k",
-    help="Audio bitrate for compression",
-)
-def process_files(verbose: bool, watch: bool, compress: bool, bitrate: str):
+def process_files(verbose: bool, watch: bool, compress: bool):
     """Process podcast files: compress large files and embed metadata."""
     logger = setup_logging(verbose)
 
@@ -413,7 +407,7 @@ def process_files(verbose: bool, watch: bool, compress: bool, bitrate: str):
 
                         # Compress if needed and enabled
                         if compress and podcast.filesize > MAX_AUDIO_SIZE:
-                            result = await compress_podcast(podcast, bitrate=bitrate)
+                            result = await compress_podcast(podcast)
                             if result:
                                 click.echo(f"📦 Compressed: {podcast.name}")
                                 podcast.file = result["file"]
@@ -578,7 +572,7 @@ def download_youtube(
                     click.echo(f"❌ Source with ID {source_id} not found.")
                     return
             else:
-                sources = await SourceService.get_all("id")
+                sources = await SourceService.get_all()
 
             if not sources:
                 click.echo("❌ No sources found.")
@@ -632,16 +626,11 @@ def download_youtube(
 
 async def compress_podcast(
     podcast: Podcast,
-    bitrate: Literal["64k", "32k"] = "64k",
-    codec_format: Literal["libmp3lame", "libopus"] = "libmp3lame",
+    bitrate: Literal["96k", "64k"] = "96k",
 ) -> bool:
     """Compress big file podcast."""
     input_path = podcast.file
-    if codec_format == "libmp3lame":
-        ext = "mp3"
-    else:
-        ext = "opus"
-    output_path = f"{podcast.file}-conv.{ext}"
+    output_path = f"{podcast.file}-conv.mp3"
 
     command = [
         "ffmpeg",
@@ -650,8 +639,6 @@ async def compress_podcast(
         "-y",
         "-ac",
         "2",
-        "-c:a",
-        codec_format,
         "-b:a",
         bitrate,
         output_path,
@@ -667,16 +654,11 @@ async def compress_podcast(
         return {"file": output_path, "size": new_size, "bitrate": bitrate}
 
     # Try different compression settings
-    if codec_format == "libmp3lame":
-        if bitrate == "64k":
-            codec_format = "libopus"
-    else:
-        if bitrate == "64k":
-            bitrate = "32k"
-        elif bitrate == "32k":
-            return False
-
-    return await compress_podcast(podcast, bitrate=bitrate, codec_format=codec_format)
+    if bitrate == "96k":
+        bitrate == "64k"
+    elif bitrate == "64k":  # Min quality
+        return {"file": output_path, "size": new_size, "bitrate": bitrate}
+    return await compress_podcast(podcast, bitrate=bitrate)
 
 
 async def embed_metadata(podcast):
