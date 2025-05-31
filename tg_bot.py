@@ -109,6 +109,9 @@ async def post_telegram(context: ContextTypes.DEFAULT_TYPE) -> None:
 
         else:
             print(f"Failed to post podcast '{podcast.name}' to channel.")
+            print("Mark podcast as inactive")
+            podcast.is_active = False
+            await podcast.save()
 
     except Exception as e:
         logger.error(f"Error in post command: {e}")

@@ -162,150 +162,6 @@ def cleanup(dry_run: bool, verbose: bool, force: bool):
 
 
 @cli.command()
-@click.option("--active-only", is_flag=True, help="Show only active podcasts")
-@click.option("--downloaded-only", is_flag=True, help="Show only downloaded podcasts")
-@click.option(
-    "--format",
-    type=click.Choice(["table", "json", "csv"]),
-    default="table",
-    help="Output format",
-)
-def status(active_only: bool, downloaded_only: bool, format: str):
-    """Show application and podcast status."""
-
-    async def _status():
-        await init_db()
-
-        try:
-            # Build query filters
-            filters = {}
-            if active_only:
-                filters["is_active"] = True
-            if downloaded_only:
-                filters["is_downloaded"] = True
-
-            if filters:
-                podcasts = await Podcast.filter(**filters)
-            else:
-                podcasts = await Podcast.all()
-
-            # Get summary stats
-            total = await Podcast.all().count()
-            active = await Podcast.filter(is_active=True).count()
-            downloaded = await Podcast.filter(is_downloaded=True).count()
-            inactive_downloaded = await Podcast.filter(
-                is_active=False, is_downloaded=True
-            ).count()
-
-            if format == "json":
-                import json
-
-                data = {
-                    "summary": {
-                        "total": total,
-                        "active": active,
-                        "downloaded": downloaded,
-                        "inactive_downloaded": inactive_downloaded,
-                    },
-                    "podcasts": [
-                        {
-                            "id": p.id,
-                            "name": p.name,
-                            "is_active": p.is_active,
-                            "is_downloaded": p.is_downloaded,
-                            "file": p.file,
-                        }
-                        for p in podcasts
-                    ],
-                }
-                click.echo(json.dumps(data, indent=2))
-
-            elif format == "csv":
-                click.echo("id,name,is_active,is_downloaded,file")
-                for p in podcasts:
-                    click.echo(
-                        f"{p.id},{p.name},{p.is_active},{p.is_downloaded},{p.file}"
-                    )
-
-            else:  # table format
-                click.echo("📊 Podcast Status Summary")
-                click.echo("=" * 40)
-                click.echo(f"Total podcasts:      {total}")
-                click.echo(f"Active podcasts:     {active}")
-                click.echo(f"Downloaded podcasts: {downloaded}")
-                click.echo(f"Cleanup candidates:  {inactive_downloaded}")
-
-                if podcasts:
-                    click.echo(f"\n📋 Podcast List ({len(podcasts)} items)")
-                    click.echo("-" * 60)
-                    for p in podcasts:
-                        status_icons = []
-                        if p.is_active:
-                            status_icons.append("🟢")
-                        else:
-                            status_icons.append("🔴")
-                        if p.is_downloaded:
-                            status_icons.append("⬇️")
-
-                        click.echo(f"{''.join(status_icons)} {p.name}")
-
-        except Exception as e:
-            click.echo(f"❌ Error: {e}", err=True)
-            raise
-        finally:
-            await close_db()
-
-    asyncio.run(_status())
-
-
-@cli.command()
-@click.argument("podcast_id", type=int)
-@click.option("--force", is_flag=True, help="Skip confirmation prompt")
-def delete(podcast_id: int, force: bool):
-    """Delete a specific podcast and its files by ID."""
-
-    async def _delete():
-        await init_db()
-
-        try:
-            podcast = await Podcast.get_or_none(id=podcast_id)
-
-            if not podcast:
-                click.echo(f"❌ Podcast with ID {podcast_id} not found.")
-                return
-
-            click.echo(f"Podcast: {podcast.name}")
-            click.echo(f"Status: {'Active' if podcast.is_active else 'Inactive'}")
-            click.echo(f"Downloaded: {'Yes' if podcast.is_downloaded else 'No'}")
-
-            if not force:
-                if not click.confirm(
-                    f"Delete podcast '{podcast.name}' and all its files?"
-                ):
-                    click.echo("❌ Deletion cancelled.")
-                    return
-
-            logger = setup_logging()
-
-            # Remove files if downloaded
-            if podcast.is_downloaded:
-                await remove_podcast_files(podcast, logger)
-
-            # Delete from database
-            await podcast.delete()
-
-            click.echo(f"✅ Podcast '{podcast.name}' deleted successfully.")
-
-        except Exception as e:
-            click.echo(f"❌ Error: {e}", err=True)
-            raise
-        finally:
-            await close_db()
-
-    asyncio.run(_delete())
-
-
-@cli.command()
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
 @click.option("--active-only", is_flag=True, help="Process only active podcasts")
 def add_categories(verbose: bool, active_only: bool):
@@ -413,8 +269,11 @@ def process_files(verbose: bool, watch: bool, compress: bool):
                                 podcast.file = result["file"]
                                 podcast.filesize = result["size"]
                                 podcast.bitrate = result["bitrate"]
-                                await podcast.save()
+                                podcast.is_processed = True
                                 compressed_count += 1
+                            else:
+                                podcast.is_processed = True
+                            await podcast.save()
 
                         # Embed metadata
                         await embed_metadata(podcast)
@@ -654,10 +513,13 @@ async def compress_podcast(
         return {"file": output_path, "size": new_size, "bitrate": bitrate}
 
     # Try different compression settings
+
     if bitrate == "96k":
-        bitrate == "64k"
+        bitrate = "64k"
     elif bitrate == "64k":  # Min quality
+        print("64k")
         return {"file": output_path, "size": new_size, "bitrate": bitrate}
+
     return await compress_podcast(podcast, bitrate=bitrate)
 
 
@@ -764,6 +626,9 @@ async def process_channel_download(
                     "is_posted": False,
                     "thumbnail_url": video_info.get("thumbnail", ""),
                 }
+                logger.info("New podcast:")
+                logger.info(podcast_data)
+
                 podcast = await PodcastService.create(podcast_data)
             elif podcast.is_downloaded:
                 continue
@@ -775,9 +640,11 @@ async def process_channel_download(
 
             if podcast.is_active:
                 # Download
+                logger.info(f"Downloading new audio: {video_url}: {podcast.name}")
                 downloaded = download_audio(video_url, channel_dir, quality)
             else:
                 downloaded = False
+                logger.info(f"Not downloading - {podcast.name}")
             if downloaded:
                 # Download thumbnail
                 thumbnail_path = f"{downloaded.get('file_path')}-thumb.jpg"
