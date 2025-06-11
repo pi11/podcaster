@@ -194,7 +194,7 @@ class PodcastService:
     async def get_relevant(tg_id) -> List[Podcast]:
         """Get podcasts ready for posting"""
         return await Podcast.filter(
-            source__tg_channel__id=tg_id,
+            tg_channel__id=tg_id,
             is_active=True,
             is_posted=False,
             is_processed=True,

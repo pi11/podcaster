@@ -111,7 +111,10 @@ class Podcast(models.Model):
     name = fields.CharField(max_length=500)
     description = fields.TextField(null=True)
 
-    source = fields.ForeignKeyField("models.Source", related_name="source")
+    source = fields.ForeignKeyField("models.Source", related_name="source", null=True)
+    tg_channel = fields.ForeignKeyField(
+        "models.TgChannel", related_name="tgchannel", null=True
+    )
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
     publication_date = fields.DatetimeField()

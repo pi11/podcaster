@@ -24,7 +24,7 @@ from tortoise.contrib.postgres.functions import Random
 import yt_dlp
 
 # Import your app modules
-from app.models import Podcast, Source
+from app.models import Podcast, Source, TgChannel
 from app.services import PodcastService, SourceService, BannedWordsService
 from app.utils.helpers import init_db, close_db
 
@@ -397,6 +397,8 @@ def set_dates(verbose: bool, current_date: bool):
 
 @cli.command("download")
 @click.option("--source-id", type=int, help="Download from specific source ID only")
+@click.option("--url", help="Download from specific URL")
+@click.option("--tg-channel", help="Telegram channel ID for URL downloads")
 @click.option("--quality", default="64", help="Audio quality in kbps")
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
 @click.option(
@@ -404,6 +406,8 @@ def set_dates(verbose: bool, current_date: bool):
 )
 def download_youtube(
     source_id: Optional[int],
+    url: Optional[str],
+    tg_channel: Optional[str],
     quality: str,
     verbose: bool,
     dry_run: bool,
@@ -424,6 +428,34 @@ def download_youtube(
         await init_db()
 
         try:
+            # Handle single URL download
+            if url:
+                if dry_run:
+                    click.echo(f"🔍 Would download from URL: {url}")
+                    return
+
+                # Get tg_channel object if provided
+                tg_channel_obj = None
+                if tg_channel:
+                    tg_channel_obj = await TgChannel.filter(id=tg_channel).first()
+                    if not tg_channel_obj:
+                        click.echo(
+                            f"❌ Telegram channel with ID {tg_channel} not found."
+                        )
+                        return
+
+                # Ensure output directory exists
+                os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+                downloaded = await download_single_url(
+                    url, tg_channel_obj, quality, verbose, logger
+                )
+                if downloaded:
+                    click.echo(f"✅ Downloaded: {downloaded['title']}")
+                else:
+                    click.echo("❌ Failed to download from URL")
+                return
+
             # Get sources
             if source_id:
                 sources = await Source.filter(id=source_id)
@@ -618,6 +650,7 @@ async def process_channel_download(
                     "description": video_info.get("description", ""),
                     "url": video_url,
                     "source_id": source.id,
+                    "tg_channel_id": source.tg_channel_id,
                     "yt_id": video_info.get("id"),
                     "publication_date": nd,
                     "is_processed": False,
@@ -631,6 +664,10 @@ async def process_channel_download(
 
                 podcast = await PodcastService.create(podcast_data)
             elif podcast.is_downloaded:
+                continue
+
+            if not podcast.is_active:
+                logger.info(f"Podcast is inactive, skipping download: {podcast.name}")
                 continue
 
             # Check theme if needed
@@ -757,6 +794,84 @@ def download_audio(video_url, output_path, quality="64"):
         return None
 
     except Exception:
+        return None
+
+
+async def download_single_url(
+    url: str, tg_channel_obj, quality: str, verbose: bool, logger
+) -> dict:
+    """Download a single URL and create podcast entry."""
+    try:
+        # Get video info
+        video_info = get_video_info(url)
+        if not video_info or "error" in video_info:
+            logger.error(f"Failed to get video info for {url}")
+            return None
+
+        # Check if podcast already exists
+        existing_podcast = await Podcast.filter(url=url).first()
+        if existing_podcast:
+            logger.info(f"Podcast already exists: {existing_podcast.name}")
+            return {"title": existing_podcast.name}
+
+        # Create directory for download
+        download_dir = os.path.join(OUTPUT_DIR, "single_downloads")
+
+        # Download the audio
+        logger.info(f"Downloading: {video_info.get('title')}")
+        downloaded = download_audio(url, download_dir, quality)
+
+        if not downloaded:
+            logger.error(f"Failed to download {url}")
+            return None
+
+        # Get next publication date
+        nd = await PodcastService.get_next_publication_date()
+
+        # Create podcast entry
+        podcast_data = {
+            "name": video_info.get("title"),
+            "description": video_info.get("description", ""),
+            "url": url,
+            "source_id": None,  # Source should be null as requested
+            "tg_channel_id": tg_channel_obj.id if tg_channel_obj else None,
+            "yt_id": video_info.get("id"),
+            "publication_date": nd,
+            "is_processed": False,
+            "file": downloaded.get("file_path"),
+            "filesize": os.path.getsize(downloaded.get("file_path", "")),
+            "duration": video_info.get("duration"),
+            "is_posted": False,
+            "is_downloaded": True,
+            "thumbnail_url": video_info.get("thumbnail", ""),
+        }
+
+        podcast = await PodcastService.create(podcast_data)
+
+        # Download thumbnail
+        if video_info.get("thumbnail"):
+            thumbnail_path = f"{downloaded.get('file_path')}-thumb.jpg"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(video_info.get("thumbnail")) as response:
+                    if response.status == 200:
+                        with open(thumbnail_path, "wb") as f:
+                            f.write(await response.read())
+
+                        # Update podcast with thumbnail path
+                        podcast.thumbnail = thumbnail_path
+                        await podcast.save()
+
+        logger.info(f"Created podcast: {podcast.name}")
+
+        if verbose:
+            click.echo(f"  📁 File: {downloaded.get('file_path')}")
+            click.echo(f"  📊 Size: {podcast.filesize / 1000 / 1000:.2f} MB")
+            click.echo(f"  ⏱️  Duration: {video_info.get('duration')} seconds")
+
+        return {"title": podcast.name, "id": podcast.id}
+
+    except Exception as e:
+        logger.error(f"Error downloading single URL {url}: {e}")
         return None
 
 

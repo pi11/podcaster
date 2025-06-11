@@ -96,7 +96,7 @@ async def post_telegram(context: ContextTypes.DEFAULT_TYPE) -> None:
             return
         # Post to channel
         source = await podcast.source
-        channel = await source.tg_channel
+        channel = await podcast.tg_channel
         success = await post_podcast_to_telegram(podcast, context.bot, channel.tg_id)
 
         if success:
@@ -142,13 +142,17 @@ async def post_podcast_to_telegram(podcast, bot, channel_id):
         message = f"{podcast.name}\n{podcast.url}\n"
         cats = await podcast.categories
         source = await podcast.source
-        message += "\n"
-        hashtag = "#" + source.name.replace(" ", "").replace("'", "").lower()
-        message += f"{hashtag} "
+        if source:
+            message += "\n"
+            hashtag = "#" + source.name.replace(" ", "").replace("'", "").lower()
+            message += f"{hashtag} "
 
         hashtags = [c.name.replace(" ", "").lower().strip() for c in cats]
-        if source.extract_tags:
-            # also extract tags from description
+        if source:
+            if source.extract_tags:
+                # also extract tags from description
+                hashtags += extract_hashtags(podcast.description)
+        else:  # by default extraxt tags anyway
             hashtags += extract_hashtags(podcast.description)
 
         proc_hashtags = [h.lower().strip() for h in hashtags]
