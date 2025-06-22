@@ -137,6 +137,8 @@ class Podcast(models.Model):
     bitrate = fields.CharField(max_length=10, null=True)
     duration = fields.IntField(null=True)
 
+    failed_times = fields.IntField(default=0)
+
     def __str__(self):
         return self.url
 

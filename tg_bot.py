@@ -109,9 +109,13 @@ async def post_telegram(context: ContextTypes.DEFAULT_TYPE) -> None:
 
         else:
             print(f"Failed to post podcast '{podcast.name}' to channel.")
-            print("Mark podcast as inactive")
-            podcast.is_active = False
-            await podcast.save()
+            if podcast.failed_times > 3:
+                print("Failed 4 times, mark podcast as inactive")
+                podcast.is_active = False
+                await podcast.save()
+            else:
+                podcast.failed_times += 1
+                await podcast.save()
 
     except Exception as e:
         logger.error(f"Error in post command: {e}")
@@ -175,6 +179,9 @@ async def post_podcast_to_telegram(podcast, bot, channel_id):
                 caption=message,
                 title=podcast.name,
                 thumbnail=thumbnail,
+                read_timeout=30,  # Read timeout in seconds
+                write_timeout=50,  # Write timeout in seconds
+                connect_timeout=10,
             )
         logger.info(f"Posted podcast '{podcast.name}' to Telegram channel")
         podcast.is_posted = True
