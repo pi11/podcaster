@@ -162,7 +162,7 @@ async def post_podcast_to_telegram(podcast, bot, channel_id):
         proc_hashtags = [h.lower().strip() for h in hashtags]
         hashtags = list(set(proc_hashtags))
 
-        for hashtag in hashtags:
+        for hashtag in hashtags[:8]:  # max 8 hash tags
             message += f"#{hashtag.lower()} "
 
         with open(podcast.file, "rb") as audio:
