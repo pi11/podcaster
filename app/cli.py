@@ -318,83 +318,6 @@ def process_files(verbose: bool, watch: bool, compress: bool):
         asyncio.run(_process_files())
 
 
-@cli.command("set-dates")
-@click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
-@click.option(
-    "--current-date", is_flag=True, help="Set current date for all podcasts initially"
-)
-def set_dates(verbose: bool, current_date: bool):
-    """Set publication dates for podcasts."""
-    logger = setup_logging(verbose)
-
-    async def _set_dates():
-        await init_db()
-
-        try:
-            async with in_transaction():
-                # First phase: set current date and check themes for related-only sources
-                if current_date:
-                    podcasts = await Podcast.filter(
-                        is_active=True, is_posted=False
-                    ).prefetch_related("source")
-
-                    now = datetime.now()
-                    current_date_count = 0
-
-                    for podcast in podcasts:
-                        podcast.publication_date = now
-                        await podcast.save()
-                        current_date_count += 1
-
-                        # Check theme for related-only sources
-                        if podcast.source.only_related:
-                            if verbose:
-                                click.echo(f"🔍 Checking theme for: {podcast.name}")
-                            await PodcastService.check_theme(id=podcast.id)
-
-                    click.echo(f"📅 Set current date for {current_date_count} podcasts")
-
-                # Second phase: set scheduled dates for downloaded podcasts
-                podcasts = (
-                    await Podcast.filter(
-                        is_active=True, is_posted=False, is_downloaded=True
-                    )
-                    .annotate(order=Random())
-                    .order_by("order")
-                )
-
-                scheduled_count = 0
-
-                with click.progressbar(
-                    podcasts, label="Setting publication dates", show_eta=True
-                ) as bar:
-                    for podcast in bar:
-                        try:
-                            next_date = await PodcastService.get_next_publication_date()
-                            podcast.publication_date = next_date
-                            await podcast.save()
-
-                            if verbose:
-                                click.echo(f"📅 {podcast.name} -> {next_date}")
-
-                            scheduled_count += 1
-
-                        except Exception as e:
-                            logger.error(f"Error setting date for {podcast.name}: {e}")
-
-                click.echo(f"✅ Publication dates set!")
-                click.echo(f"   Scheduled: {scheduled_count} podcasts")
-
-        except Exception as e:
-            logger.error(f"Error during date setting: {e}")
-            click.echo(f"❌ Error: {e}", err=True)
-            raise
-        finally:
-            await close_db()
-
-    asyncio.run(_set_dates())
-
-
 @cli.command("download")
 @click.option("--source-id", type=int, help="Download from specific source ID only")
 @click.option("--url", help="Download from specific URL")
@@ -610,23 +533,29 @@ async def process_channel_download(
         # Get channel videos
         cmd = [
             "yt-dlp",
+            "--cookies-from-browser",
+            "firefox",
             "--dump-json",
             "--flat-playlist",
             "--playlist-end",
             str(max_videos),
             source.url,
         ]
-
         process = subprocess.run(cmd, capture_output=True, text=True, check=True)
         videos = [
             json.loads(line) for line in process.stdout.splitlines() if line.strip()
         ]
 
         downloaded_count = 0
-
+        print("Processing videos...")
         for video in videos:
+            # Check if already exists
+            podcast = await Podcast.filter(yt_id=video["id"]).first()
+            if podcast:
+                print(f"Podcast already downloaded: {podcast}, skipping")
+                continue
             video_url = f"https://www.youtube.com/watch?v={video['id']}"
-
+            print(f"Video url: {video_url}")
             # Get video info
             video_info = get_video_info(video_url)
             if not video_info or "error" in video_info:
@@ -641,8 +570,6 @@ async def process_channel_download(
             if any(bn.name.lower() in title_lower for bn in banned_words):
                 continue
 
-            # Check if already exists
-            podcast = await Podcast.filter(yt_id=video["id"]).first()
             if not podcast:
                 nd = await PodcastService.get_next_publication_date()
                 podcast_data = {
@@ -707,13 +634,23 @@ async def process_channel_download(
         return downloaded_count
 
     except Exception as e:
+
         logger.error(f"Error processing channel {source.name}: {e}")
+        import traceback
+
+        print(traceback.format_exc())
         return 0
 
 
 def get_video_info(url):
     """Get video information using yt-dlp."""
-    ydl_opts = {"quiet": True, "no_warnings": True, "skip_download": True}
+    ydl_opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "cookiesfrombrowser": ("firefox",),
+        "cookies_from_browser": "firefox",
+    }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -737,7 +674,14 @@ def download_audio(video_url, output_path, quality="64"):
         os.makedirs(output_path, exist_ok=True)
 
         # Get video info first
-        info_cmd = ["yt-dlp", "--dump-json", "--no-playlist", video_url]
+        info_cmd = [
+            "yt-dlp",
+            "--dump-json",
+            "--cookies-from-browser",
+            "firefox",
+            "--no-playlist",
+            video_url,
+        ]
         info_process = subprocess.run(
             info_cmd, capture_output=True, text=True, check=True
         )
@@ -767,11 +711,14 @@ def download_audio(video_url, output_path, quality="64"):
             "--embed-thumbnail",
             "--add-metadata",
             "--no-playlist",
+            "--cookies-from-browser",
+            "firefox",
             "-o",
             output_template,
             video_url,
         ]
 
+        print("Downloading")
         subprocess.run(cmd, capture_output=True, text=True, check=True)
 
         # Check for output file
