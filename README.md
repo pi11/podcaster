@@ -81,48 +81,6 @@ python web.py
 python tg_bot.py
 ```
 
-## Data Models
-
-### Podcast
-- `url` - YouTube video URL
-- `yt_id` - YouTube video ID
-- `name` - Title
-- `description` - Description
-- `source` - Source (YouTube channel)
-- `tg_channel` - Telegram channel for publishing
-- `publication_date` - Publication date
-- `is_active` - Whether podcast is active
-- `is_posted` - Whether posted
-- `is_processed` - Whether processed
-- `is_downloaded` - Whether downloaded
-- `file` - File path
-- `filesize` - File size
-- `duration` - Duration
-- `categories` - Categories
-
-### Source (YouTube Channels)
-- `url` - Channel URL
-- `name` - Name
-- `min_duration` / `max_duration` - Duration filter
-- `only_related` - Theme-related videos only
-- `tg_channel` - Associated Telegram channel
-- `max_videos_per_channel` - Video limit
-- `extract_tags` - Extract tags
-
-### TgChannel
-- `name` - Channel name
-- `tg_id` - Telegram ID
-- `auto_post` - Auto-posting enabled
-
-### Category
-- `name` - Category name
-
-### CategoryIdentification
-- Keywords for automatic categorization
-
-### BannedWords
-- Banned words for filtering
-
 ## Features
 
 ### Audio Compression
@@ -149,6 +107,3 @@ aerich upgrade
 
 WTFPL - Do What The F*ck You Want To Public License
 
-## Author
-
-webii (webii@pm.me)
