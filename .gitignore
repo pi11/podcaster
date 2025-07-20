@@ -15,11 +15,6 @@ app/local_settings.py
 *.rar
 *.bak
 local_settings.py
-push.sh
-data.tar.gz
-*.dmp
-DATA/*
-data/bad/
 media/uploads/*
 log.txt
 tmp.txt
@@ -35,9 +30,8 @@ art/icons/
 .env
 .env.prod
 binlog*
-redditprn/sphinx.conf
 data/
 _index/
 media/
 *.log
-
+cookies.txt

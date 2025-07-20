@@ -76,6 +76,8 @@ python web.py
 # Available at http://localhost:8000
 ```
 
+![Web Interface Example](web-1.png)
+
 ### Run Telegram Bot
 ```bash
 python tg_bot.py
