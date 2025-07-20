@@ -533,8 +533,8 @@ async def process_channel_download(
         # Get channel videos
         cmd = [
             "yt-dlp",
-            "--cookies-from-browser",
-            "firefox",
+            # "--cookies-from-browser",
+            # "firefox",
             "--dump-json",
             "--flat-playlist",
             "--playlist-end",
@@ -648,8 +648,8 @@ def get_video_info(url):
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
-        "cookiesfrombrowser": ("firefox",),
-        "cookies_from_browser": "firefox",
+        # "cookiesfrombrowser": ("firefox",),
+        # "cookies_from_browser": "firefox",
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -677,8 +677,8 @@ def download_audio(video_url, output_path, quality="64"):
         info_cmd = [
             "yt-dlp",
             "--dump-json",
-            "--cookies-from-browser",
-            "firefox",
+            # "--cookies-from-browser",
+            # "firefox",
             "--no-playlist",
             video_url,
         ]
@@ -711,8 +711,8 @@ def download_audio(video_url, output_path, quality="64"):
             "--embed-thumbnail",
             "--add-metadata",
             "--no-playlist",
-            "--cookies-from-browser",
-            "firefox",
+            # "--cookies-from-browser",
+            # "firefox",
             "-o",
             output_template,
             video_url,

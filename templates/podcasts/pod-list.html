@@ -13,7 +13,8 @@
     {% for p in podcasts %}
     <tr {% if  p.get_size_mb_int() > 49 %}style="background-color: rgba(125, 0, 0, 0.1);"{% endif %}>
       <td>{{ p.id }}</td>
-      <td>{{ p.name }}
+      <td>{{ p.name }}<br />
+      {{ p.url }}
       <br />
       {% if p.thumbnail_url %}
       <a target="_blank" href="{{ p.url }}"><img src="{{ p.thumbnail_url }}" width="100%"/></a>
@@ -32,6 +33,7 @@
            Your browser does not support the audio element.
        </audio>
        {% endif %}
+       <a href="{{ p.file }}">mp3</a>
       </td>
       <td>
         <a href="/podcasts?tg_id={{ p.tg_channel.id }}">{{ p.tg_channel }}</a>
