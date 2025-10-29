@@ -8,6 +8,8 @@ import logging
 import subprocess
 import json
 import time
+import traceback
+
 from typing import Optional, Literal
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -20,7 +22,6 @@ import mutagen
 from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, APIC, error, TIT2, TALB
 from tortoise.transactions import in_transaction
-from tortoise.contrib.postgres.functions import Random
 import yt_dlp
 
 # Import your app modules
@@ -142,6 +143,7 @@ def cleanup(dry_run: bool, verbose: bool, force: bool):
                         logger.info(f"Processed podcast: {podcast.name}")
                         processed_count += 1
                     except Exception as e:
+                        print(traceback.format_exc())
                         logger.error(f"Error processing {podcast.name}: {e}")
                         error_count += 1
 
@@ -203,6 +205,7 @@ def add_categories(verbose: bool, active_only: bool):
                         processed_count += 1
 
                     except Exception as e:
+                        print(traceback.format_exc())
                         logger.error(f"Error processing {podcast.name}: {e}")
                         error_count += 1
 
@@ -288,6 +291,8 @@ def process_files(verbose: bool, watch: bool, compress: bool):
                         processed_count += 1
 
                     except Exception as e:
+                        print(traceback.format_exc())
+
                         logger.error(f"Error processing {podcast.name}: {e}")
                         error_count += 1
 
@@ -323,6 +328,7 @@ def process_files(verbose: bool, watch: bool, compress: bool):
 @click.option("--url", help="Download from specific URL")
 @click.option("--tg-channel", help="Telegram channel ID for URL downloads")
 @click.option("--quality", default="64", help="Audio quality in kbps")
+@click.option("--random_sort", is_flag=True, help="Sort sources randomly")
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
 @click.option(
     "--dry-run", is_flag=True, help="Show what would be downloaded without downloading"
@@ -330,14 +336,14 @@ def process_files(verbose: bool, watch: bool, compress: bool):
 def download_youtube(
     source_id: Optional[int],
     url: Optional[str],
-    tg_channel: Optional[str],
+    tg_channel: Optional[int],
     quality: str,
+    random_sort: bool,
     verbose: bool,
     dry_run: bool,
 ):
     """Download videos from YouTube channels as MP3."""
     logger = setup_logging(verbose)
-
     # Check if yt-dlp is installed
     try:
         subprocess.run(["yt-dlp", "--version"], capture_output=True, check=True)
@@ -349,23 +355,13 @@ def download_youtube(
 
     async def _download():
         await init_db()
-
         try:
+            tg_channel_obj = None
             # Handle single URL download
             if url:
                 if dry_run:
                     click.echo(f"🔍 Would download from URL: {url}")
                     return
-
-                # Get tg_channel object if provided
-                tg_channel_obj = None
-                if tg_channel:
-                    tg_channel_obj = await TgChannel.filter(id=tg_channel).first()
-                    if not tg_channel_obj:
-                        click.echo(
-                            f"❌ Telegram channel with ID {tg_channel} not found."
-                        )
-                        return
 
                 # Ensure output directory exists
                 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -385,8 +381,17 @@ def download_youtube(
                 if not sources:
                     click.echo(f"❌ Source with ID {source_id} not found.")
                     return
+            elif tg_channel:
+                print(f"Processing only for tg channel: [{tg_channel}]")
+                sources = await SourceService.get_by_channel_id(
+                    tg_channel_id=tg_channel
+                )
             else:
-                sources = await SourceService.get_all()
+                if random_sort:
+                    print("Sorting sources randomly")
+                    sources = await SourceService.get_all_random()
+                else:
+                    sources = await SourceService.get_all()
 
             if not sources:
                 click.echo("❌ No sources found.")
@@ -419,6 +424,7 @@ def download_youtube(
                 except Exception as e:
                     logger.error(f"Error processing source {source.name}: {e}")
                     click.echo(f"❌ Error processing {source.name}: {e}")
+                    print(traceback.format_exc())
 
             if not dry_run:
                 click.echo(
@@ -486,11 +492,13 @@ async def embed_metadata(podcast):
     try:
         audio = MP3(path, ID3=ID3)
     except mutagen.mp3.HeaderNotFoundError:
+        print(traceback.format_exc())
         return
 
     try:
         audio.add_tags()
     except error:
+        # print(traceback.format_exc())
         pass
 
     # Convert webp to jpg if needed
@@ -515,6 +523,8 @@ async def embed_metadata(podcast):
         audio.save()
         return True
     except Exception as e:
+        print(traceback.format_exc())
+
         logging.getLogger(__name__).warning(f"Error embedding metadata: {e}")
         return False
 
@@ -535,39 +545,44 @@ async def process_channel_download(
             "yt-dlp",
             # "--cookies-from-browser",
             # "firefox",
+            # "--cookies-from-browser",
+            # "chromium",
+            "--extractor-args",
+            "youtube:player-client=android_vr",
+            "--proxy",
+            "socks5://127.0.0.1:10808/",
             "--dump-json",
             "--flat-playlist",
             "--playlist-end",
             str(max_videos),
             source.url,
         ]
+        print(" ".join(cmd))
         process = subprocess.run(cmd, capture_output=True, text=True, check=True)
         videos = [
             json.loads(line) for line in process.stdout.splitlines() if line.strip()
         ]
 
+        total_videos = len(videos)
         downloaded_count = 0
-        print("Processing videos...")
+        print(f"Processing {total_videos} videos...")
         for video in videos:
             # Check if already exists
             podcast = await Podcast.filter(yt_id=video["id"]).first()
             if podcast:
-                print(f"Podcast already downloaded: {podcast}, skipping")
-                continue
+                if podcast.is_downloaded:
+                    print(f"Podcast already downloaded: {podcast}, skipping")
+                    continue
+                else:
+                    print(f"Downloading previously added podcast: {podcast}")
+
             video_url = f"https://www.youtube.com/watch?v={video['id']}"
             print(f"Video url: {video_url}")
+
             # Get video info
             video_info = get_video_info(video_url)
             if not video_info or "error" in video_info:
-                continue
-
-            duration = video_info.get("duration", 0)
-            if duration < source.min_duration or duration > source.max_duration:
-                continue
-
-            # Check banned words
-            title_lower = video_info["title"].lower()
-            if any(bn.name.lower() in title_lower for bn in banned_words):
+                print(f"Did not get video info {video_info}")
                 continue
 
             if not podcast:
@@ -586,11 +601,29 @@ async def process_channel_download(
                     "is_posted": False,
                     "thumbnail_url": video_info.get("thumbnail", ""),
                 }
-                logger.info("New podcast:")
-                logger.info(podcast_data)
-
                 podcast = await PodcastService.create(podcast_data)
+                logger.info(f"New podcast: {podcast}")
+
             elif podcast.is_downloaded:
+                print("Podcast already downloaded, skiping")
+                continue
+
+            duration = video_info.get("duration", 0)
+            if duration < source.min_duration or duration > source.max_duration:
+                print(
+                    f"Video is too small or too big: {duration // 60} min {duration % 60 } seconds"
+                )
+                podcast.is_active = False
+                await podcast.save()
+                continue
+
+            # Check banned words
+            title_lower = video_info["title"].lower()
+            if any(bn.name.lower() in title_lower for bn in banned_words):
+                print(f"Banned word found, skiping video")
+                podcast.is_active = False
+                await podcast.save()
+
                 continue
 
             if not podcast.is_active:
@@ -600,6 +633,7 @@ async def process_channel_download(
             # Check theme if needed
             if source.only_related:
                 if not await PodcastService.check_theme(id=podcast.id):
+                    print("Not relevant podcast: {podcast}, skipping")
                     continue
 
             if podcast.is_active:
@@ -613,7 +647,9 @@ async def process_channel_download(
                 # Download thumbnail
                 thumbnail_path = f"{downloaded.get('file_path')}-thumb.jpg"
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(podcast.thumbnail_url) as response:
+                    async with session.get(
+                        podcast.thumbnail_url, proxy="socks5://127.0.0.1:10808/"
+                    ) as response:
                         if response.status == 200:
                             with open(thumbnail_path, "wb") as f:
                                 f.write(await response.read())
@@ -636,8 +672,6 @@ async def process_channel_download(
     except Exception as e:
 
         logger.error(f"Error processing channel {source.name}: {e}")
-        import traceback
-
         print(traceback.format_exc())
         return 0
 
@@ -648,8 +682,12 @@ def get_video_info(url):
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
-        # "cookiesfrombrowser": ("firefox",),
-        # "cookies_from_browser": "firefox",
+        "proxy": "socks5://127.0.0.1:10808/",
+        "extractor-args": "youtube:player-client=android_vr",
+        # "cookiesfrombrowser": ("chromium",),
+        # "cookies_from_browser": "chromium",
+        # "--extractor-args",
+        # "youtube:player-client=default,tv"
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -665,6 +703,8 @@ def get_video_info(url):
                 "id": info.get("id"),
             }
     except Exception as e:
+        print(traceback.format_exc())
+
         return {"error": str(e)}
 
 
@@ -677,8 +717,14 @@ def download_audio(video_url, output_path, quality="64"):
         info_cmd = [
             "yt-dlp",
             "--dump-json",
+            "--proxy",
+            "socks5://127.0.0.1:10808/",
             # "--cookies-from-browser",
             # "firefox",
+            # "--cookies-from-browser",
+            # "chromium",
+            "--extractor-args",
+            "youtube:player-client=android_vr",
             "--no-playlist",
             video_url,
         ]
@@ -711,16 +757,31 @@ def download_audio(video_url, output_path, quality="64"):
             "--embed-thumbnail",
             "--add-metadata",
             "--no-playlist",
+            "--proxy",
+            "socks5://127.0.0.1:10808/",
+            "--extractor-args",
+            "youtube:player-client=android_vr",
             # "--cookies-from-browser",
             # "firefox",
+            # "--cookies-from-browser",
+            # "chromium",
             "-o",
             output_template,
             video_url,
         ]
 
-        print("Downloading")
-        subprocess.run(cmd, capture_output=True, text=True, check=True)
-
+        print("Downloading...")
+        print("=" * 20)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as e:
+            print(e.stdout)
+            print(e.stderr)
+            # print(result.stdout)
+            # print(result.stderr)
+        else:
+            print("Done")
+        print("=" * 20)
         # Check for output file
         expected_filename = f"{video_info.get('id')}.mp3"
         expected_path = os.path.join(output_path, expected_filename)
@@ -737,10 +798,13 @@ def download_audio(video_url, output_path, quality="64"):
                 "channel": video_info.get("channel", ""),
                 "duration": video_info.get("duration", 0),
             }
+        else:
+            print(f"File not found: {expected_path}")
 
         return None
 
     except Exception:
+        print(traceback.format_exc())
         return None
 
 
@@ -799,7 +863,9 @@ async def download_single_url(
         if video_info.get("thumbnail"):
             thumbnail_path = f"{downloaded.get('file_path')}-thumb.jpg"
             async with aiohttp.ClientSession() as session:
-                async with session.get(video_info.get("thumbnail")) as response:
+                async with session.get(
+                    video_info.get("thumbnail"), proxy="socks5://127.0.0.1:10808/"
+                ) as response:
                     if response.status == 200:
                         with open(thumbnail_path, "wb") as f:
                             f.write(await response.read())
@@ -824,3 +890,4 @@ async def download_single_url(
 
 if __name__ == "__main__":
     cli()
+# 9m yGg)_r~/hDU9m)4j

@@ -1,7 +1,12 @@
 python-dotenv
+poetry
 aerich
+click
+aiohttp
 tortoise-orm[asyncpg]
-python-telegram-bot
+python-telegram-bot[job-queue]
+pillow
+slugify
 yt-dlp
 sanic
 sanic-ext

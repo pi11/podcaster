@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from typing import List, Optional, Dict, Any
 from tortoise.exceptions import DoesNotExist, IntegrityError
+from tortoise.contrib.postgres.functions import Random
 
 from app.models import (
     Category,
@@ -126,6 +127,16 @@ class SourceService:
         return await Source.all().order_by(order_by)
 
     @staticmethod
+    async def get_all_random() -> List[Source]:
+        """Get all sources sorted randomly"""
+        return (
+            await Source.all()
+            .annotate(order=Random())
+            .order_by("order")
+            .prefetch_related("source")
+        )
+
+    @staticmethod
     async def count() -> int:
         """Get channels count"""
         return await Source.all().count()
@@ -137,6 +148,11 @@ class SourceService:
             return await Source.get(id=id)
         except DoesNotExist:
             return None
+
+    @staticmethod
+    async def get_by_channel_id(tg_channel_id: int) -> Optional[List[Source]]:
+        """Get sources by tg channel id"""
+        return await Source.filter(tg_channel=tg_channel_id)
 
     @staticmethod
     async def create(url: str, name: str, only_related: bool = False) -> Source:
