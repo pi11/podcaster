@@ -4,6 +4,12 @@
                             {{ source.name }}
                         </td>
                         <td>
+                          Всего:&nbsp;<a href="/podcasts?source_id={{ source.id }}"><b>{{ i.total }}</b></a><br />
+                          Загружено:&nbsp;<b>{{ i.total_posted }}</b><br />
+                          Неделя:&nbsp;<b>{{ i.total_week }}</b><br />
+                          Месяц:&nbsp;<b>{{ i.total_month }}</b><br />
+                        </td>
+                        <td>
                             <span id="source-url-{{ source.id }}" style="max-width:400px; overflow: hidden; display: flex;">
                                 <a href="{{ source.url }}" target="_blank" class="text-blue-600 hover:underline truncate block max-w-xs">
                                     {{ source.url }}

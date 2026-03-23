@@ -227,9 +227,22 @@ async def identifications_delete(request, identification_id):
 async def sources_list(request):
     """Render sources list"""
     sources = await SourceService.get_all()
+
+    result = []
+    for source in sources:
+        result.append(
+            {
+                "source": source,
+                "total": await SourceService.get_total(source.id),
+                "total_posted": await SourceService.get_total_posted(source.id),
+                "total_week": await SourceService.get_total_week(source.id),
+                "total_month": await SourceService.get_total_month(source.id),
+            }
+        )
+
     tgs = await TgService.get_all()
     return await render(
-        "sources/list.html", context=inj({"sources": sources, "tgs": tgs})
+        "sources/list.html", context=inj({"sources": result, "tgs": tgs})
     )
 
 
@@ -281,9 +294,13 @@ async def sources_delete(request, source_id):
 async def podcasts_list(request):
     """Render podcasts list"""
 
+    source_id = int(request.args.get("source_id", 0))
+
     tg_id = int(request.args.get("tg_id", 0))
     if tg_id:
         podcasts = await PodcastService.get_relevant(tg_id)
+    elif source_id:
+        podcasts = await PodcastService.get_by_source(source_id)
     else:
         podcasts = await PodcastService.get_all()
     return await render(

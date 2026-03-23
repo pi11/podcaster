@@ -9,6 +9,7 @@ import subprocess
 import json
 import time
 import traceback
+import random
 
 from typing import Optional, Literal
 from pathlib import Path
@@ -546,9 +547,11 @@ async def process_channel_download(
             # "--cookies-from-browser",
             # "firefox",
             # "--cookies-from-browser",
-            # "chromium",
-            "--extractor-args",
-            "youtube:player-client=android_vr",
+            # "chromium:Default",
+            # "--cookies",
+            # "/tmp/cookies.txt",
+            # "--extractor-args",
+            # "youtube:player-client=android_vr",
             "--proxy",
             "socks5://127.0.0.1:10808/",
             "--dump-json",
@@ -575,6 +578,7 @@ async def process_channel_download(
                     continue
                 else:
                     print(f"Downloading previously added podcast: {podcast}")
+                    time.sleep(random.randint(1, 3))
 
             video_url = f"https://www.youtube.com/watch?v={video['id']}"
             print(f"Video url: {video_url}")
@@ -640,6 +644,7 @@ async def process_channel_download(
                 # Download
                 logger.info(f"Downloading new audio: {video_url}: {podcast.name}")
                 downloaded = download_audio(video_url, channel_dir, quality)
+                time.sleep(10)
             else:
                 downloaded = False
                 logger.info(f"Not downloading - {podcast.name}")
@@ -683,9 +688,13 @@ def get_video_info(url):
         "no_warnings": True,
         "skip_download": True,
         "proxy": "socks5://127.0.0.1:10808/",
-        "extractor-args": "youtube:player-client=android_vr",
-        # "cookiesfrombrowser": ("chromium",),
-        # "cookies_from_browser": "chromium",
+        # "extractor-args": "youtube:player-client=android_vr",
+        # "cookiesfrombrowser": (
+        #    "chromium",
+        #    "Default",
+        # ),
+        # "cookies_from_browser": "chromium" "Default",
+        # "cookies": "/tmp/cookies.txt",
         # "--extractor-args",
         # "youtube:player-client=default,tv"
     }
@@ -722,9 +731,11 @@ def download_audio(video_url, output_path, quality="64"):
             # "--cookies-from-browser",
             # "firefox",
             # "--cookies-from-browser",
-            # "chromium",
-            "--extractor-args",
-            "youtube:player-client=android_vr",
+            # "chromium:Default",
+            # "--cookies",
+            # "/tmp/cookies.txt",
+            # "--extractor-args",
+            # "youtube:player-client=android_vr",
             "--no-playlist",
             video_url,
         ]
@@ -759,12 +770,14 @@ def download_audio(video_url, output_path, quality="64"):
             "--no-playlist",
             "--proxy",
             "socks5://127.0.0.1:10808/",
-            "--extractor-args",
-            "youtube:player-client=android_vr",
+            # "--extractor-args",
+            # "youtube:player-client=android_vr",
             # "--cookies-from-browser",
             # "firefox",
             # "--cookies-from-browser",
-            # "chromium",
+            # "chromium:Default",
+            # "--cookies",
+            # "/tmp/cookies.txt",
             "-o",
             output_template,
             video_url,
@@ -785,7 +798,7 @@ def download_audio(video_url, output_path, quality="64"):
         # Check for output file
         expected_filename = f"{video_info.get('id')}.mp3"
         expected_path = os.path.join(output_path, expected_filename)
-
+        time.sleep(4)
         if os.path.exists(expected_path):
             return {
                 "title": video_info.get("title"),
@@ -823,6 +836,9 @@ async def download_single_url(
         existing_podcast = await Podcast.filter(url=url).first()
         if existing_podcast:
             logger.info(f"Podcast already exists: {existing_podcast.name}")
+            time.sleep(10)
+            logger.info(f"Sleeping for 10 seconds...")
+
             return {"title": existing_podcast.name}
 
         # Create directory for download

@@ -19,6 +19,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from telegram.request import HTTPXRequest
 
 from telegram import Update
 
@@ -221,7 +222,14 @@ def main():
         return
 
     # Create the Application
-    application = Application.builder().token(token).build()
+    request = HTTPXRequest(
+        proxy="socks5://127.0.0.1:10808",
+        connect_timeout=60.0,
+        read_timeout=90.0,
+        write_timeout=620.0,  # для загрузки больших файлов
+        pool_timeout=90.0,
+    )
+    application = Application.builder().token(token).request(request).build()
 
     # Add command handlers
     application.add_handler(CommandHandler("start", start))

@@ -12,7 +12,7 @@ app.config.update(SANIC_CONFIG)
 app.blueprint(main_bp)
 
 # Register Tortoise ORM
-register_tortoise(app, config=TORTOISE_ORM, generate_schemas=True)
+register_tortoise(app, config=TORTOISE_ORM, generate_schemas=False)
 
 
 # Initialize Aerich

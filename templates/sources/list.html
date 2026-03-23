@@ -11,13 +11,15 @@
                 <tr class="bg-gray-100 text-gray-700">
                     <th>ID</th>
                     <th>Название</th>
+                    <th>Стата</th>
                     <th>Урл</th>
                     <th>TG Канал</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="sources-table">
-              {% for source in sources %}
+              {% for i in sources %}
+              {% set source = i.source %}
               {% include "sources/row.html" %}
               {% endfor %}
             </tbody>

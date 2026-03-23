@@ -127,6 +127,28 @@ class SourceService:
         return await Source.all().order_by(order_by)
 
     @staticmethod
+    async def get_total(id: int) -> int:
+        """Get count videos per source"""
+        return await Podcast.filter(source_id=id).count()
+
+    @staticmethod
+    async def get_total_posted(id: int) -> int:
+        """Get count videos per source"""
+        return await Podcast.filter(source_id=id, is_posted=True).count()
+
+    @staticmethod
+    async def get_total_week(id: int) -> int:
+        """Get count videos per source"""
+        d = datetime.now() - timedelta(days=7)
+        return await Podcast.filter(source_id=id, created_at__gte=d).count()
+
+    @staticmethod
+    async def get_total_month(id: int) -> int:
+        """Get count videos per source"""
+        d = datetime.now() - timedelta(days=30)
+        return await Podcast.filter(source_id=id, created_at__gte=d).count()
+
+    @staticmethod
     async def get_all_random() -> List[Source]:
         """Get all sources sorted randomly"""
         return (
@@ -299,7 +321,9 @@ class PodcastService:
     @staticmethod
     async def get_by_source(source_id: int) -> List[Podcast]:
         """Get podcasts by source id"""
-        return await Podcast.filter(source_id=source_id).prefetch_related("source")
+        return await Podcast.filter(
+            source_id=source_id, is_active=True
+        ).prefetch_related("source")
 
     @staticmethod
     async def count(
