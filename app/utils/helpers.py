@@ -36,7 +36,10 @@ async def init_db():
     """Initialize database connection"""
     logger.info("Initializing database connection")
 
-    await Tortoise.init(config=TORTOISE_ORM)
+    await Tortoise.init(
+        config=TORTOISE_ORM,
+        # _enable_global_fallback=True,
+    )
     logger.info("Database connection established")
 
 
