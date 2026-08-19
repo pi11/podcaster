@@ -1,0 +1,15 @@
+<tr id="proxy-{{ proxy.id }}">
+  <td>{{ proxy.id }}</td>
+  <td>
+    <form id="proxy-form-{{ proxy.id }}" hx-post="/proxies/{{ proxy.id }}"
+          hx-target="#proxy-{{ proxy.id }}" hx-swap="outerHTML">
+      <input name="url" type="url" value="{{ proxy.url }}" required>
+    </form>
+  </td>
+  <td>
+    <button type="submit" form="proxy-form-{{ proxy.id }}">Save</button>
+    <button hx-post="/proxies/{{ proxy.id }}/delete"
+            hx-confirm="Delete this proxy?" hx-target="#proxy-{{ proxy.id }}"
+            hx-swap="outerHTML">Delete</button>
+  </td>
+</tr>

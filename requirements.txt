@@ -8,6 +8,7 @@ python-telegram-bot[job-queue]
 pillow
 slugify
 yt-dlp
+bgutil-ytdlp-pot-provider>=1.3.1,<2.0.0
 sanic
 sanic-ext
 pydantic-settings

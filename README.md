@@ -43,6 +43,7 @@ TG_TOKEN=your_telegram_bot_token
 TG_CHANNEL=@your_channel_name
 DEBUG=False
 MEDIA_DIR=media
+POT_PROVIDER_URL=http://127.0.0.1:4416
 ```
 
 ### Database Initialization
@@ -68,7 +69,39 @@ poetry run podcast download --source-id 1
 # Download specific video
 poetry run podcast download --url "https://youtube.com/watch?v=..." --tg-channel 1
 
+# Override the proxy list for one run
+poetry run podcast download --url "https://youtube.com/watch?v=..." \
+  --proxy "http://user:pass@ip:port" --verbose
+
 ```
+
+### Proxy management
+
+Open `/proxies` in the web panel to create, view, update, and delete proxy
+servers. Store each proxy as a full URL, for example
+`http://user:pass@ip:port`. A proxy is selected randomly from the database for
+each CLI download run. If the list is empty, downloads use the direct
+connection. Debug logs redact proxy passwords.
+
+### YouTube PO tokens
+
+YouTube media downloads use the `mweb` client with automatically generated GVS
+PO tokens. Install the Python dependencies and build the local Node.js provider:
+
+```bash
+poetry install
+scripts/install-pot-provider.sh
+```
+
+Start the provider in a separate terminal before running downloads:
+
+```bash
+scripts/start-pot-provider.sh
+```
+
+The application connects to `http://127.0.0.1:4416` by default. Override this
+with `POT_PROVIDER_URL`. Run `podcast download --verbose` to include PO-token
+provider trace information in the download log.
 
 ### Run Web Interface
 ```bash
@@ -108,4 +141,3 @@ aerich upgrade
 ## License
 
 WTFPL - Do What The F*ck You Want To Public License
-

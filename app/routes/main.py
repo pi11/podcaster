@@ -5,6 +5,7 @@ from sanic_ext import render
 from sanic.response import file_stream
 from tortoise.exceptions import DoesNotExist, IntegrityError
 from datetime import datetime
+from urllib.parse import urlparse
 
 from app.models import Category, CategoryIdentification, Source, Podcast
 from app.services import (
@@ -13,10 +14,27 @@ from app.services import (
     SourceService,
     PodcastService,
     TgService,
+    ProxyService,
 )
 from app.utils.helpers import inject_template_context as inj
 
 bp = Blueprint("main", url_prefix="/")
+
+
+def normalize_proxy_url(value):
+    """Validate and normalize an HTTP proxy URL before persistence."""
+    value = (value or "").strip()
+    try:
+        parsed = urlparse(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.port is None
+        ):
+            raise ValueError
+    except ValueError:
+        return None
+    return value
 
 
 @bp.route("/", methods=["GET"])
@@ -127,6 +145,52 @@ async def categories_delete(request, category_id):
         return response.text("Category not found", status=404)
 
     return response.redirect("/categories")
+
+
+# Proxy routes
+@bp.route("/proxies", methods=["GET"])
+async def proxies_list(request):
+    proxies = await ProxyService.get_all()
+    return await render("proxies/list.html", context=inj({"proxies": proxies}))
+
+
+@bp.route("/proxies", methods=["POST"])
+async def proxies_create(request):
+    proxy_url = normalize_proxy_url(request.form.get("url"))
+    if not proxy_url:
+        return response.text(
+            "A valid HTTP proxy is required (for example, http://user:pass@ip:port)",
+            status=400,
+        )
+
+    proxy = await ProxyService.create(proxy_url)
+    if not proxy:
+        return response.text("This proxy already exists", status=400)
+    if request.headers.get("HX-Request"):
+        return await render("proxies/row.html", context={"proxy": proxy})
+    return response.redirect("/proxies")
+
+
+@bp.route("/proxies/<proxy_id:int>", methods=["POST"])
+async def proxies_update(request, proxy_id):
+    proxy_url = normalize_proxy_url(request.form.get("url"))
+    if not proxy_url:
+        return response.text("A valid HTTP proxy is required", status=400)
+
+    proxy = await ProxyService.update(proxy_id, proxy_url)
+    if not proxy:
+        return response.text("Proxy not found or URL already exists", status=400)
+    if request.headers.get("HX-Request"):
+        return await render("proxies/row.html", context={"proxy": proxy})
+    return response.redirect("/proxies")
+
+
+@bp.route("/proxies/<proxy_id:int>/delete", methods=["POST"])
+async def proxies_delete(request, proxy_id):
+    success = await ProxyService.delete(proxy_id)
+    if request.headers.get("HX-Request"):
+        return response.text("") if success else response.text("Proxy not found", status=404)
+    return response.redirect("/proxies")
 
 
 # Category Identification routes

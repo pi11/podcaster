@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow-md p-6 mb-6">
+  <h1>Proxy servers</h1>
+  <p>Downloads use a randomly selected proxy from this list. Credentials are stored as part of the URL.</p>
+
+  <form hx-post="/proxies" hx-target="#proxies-table" hx-swap="afterbegin">
+    <label for="proxy-url">Proxy URL</label>
+    <input id="proxy-url" name="url" type="url"
+           placeholder="http://user:pass@ip:port" required>
+    <div class="form-actions"><button type="submit">Add proxy</button></div>
+  </form>
+
+  <div style="margin-top: 20px;">
+    <table>
+      <thead><tr><th>ID</th><th>Proxy URL</th><th>Actions</th></tr></thead>
+      <tbody id="proxies-table">
+        {% for proxy in proxies %}{% include "proxies/row.html" %}{% endfor %}
+      </tbody>
+    </table>
+    {% if not proxies %}<p id="empty-state">No proxies configured. Downloads will use a direct connection.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

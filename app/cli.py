@@ -27,7 +27,7 @@ import yt_dlp
 
 # Import your app modules
 from app.models import Podcast, Source, TgChannel
-from app.services import PodcastService, SourceService, BannedWordsService
+from app.services import PodcastService, SourceService, BannedWordsService, ProxyService
 from app.utils.helpers import init_db, close_db
 
 # Configuration
@@ -37,6 +37,78 @@ MAX_AUDIO_SIZE = 50 * 1000 * 1000  # about 50 Mb
 MAX_VIDEOS_PER_CHANNEL = 20
 MAX_VIDEO_AGE_DAYS = 1400
 DOWNLOAD_AUDIO_QUALITY = "64"
+POT_PROVIDER_URL = os.getenv("POT_PROVIDER_URL", "http://127.0.0.1:4416")
+YOUTUBE_PLAYER_CLIENT = "mweb"
+
+
+def redact_proxy(proxy: Optional[str]) -> str:
+    """Return a log-safe proxy URL without its password."""
+    if not proxy:
+        return "direct connection"
+    parsed = urlparse(proxy)
+    host = parsed.hostname or "unknown-host"
+    port = f":{parsed.port}" if parsed.port else ""
+    username = f"{parsed.username}:***@" if parsed.username else ""
+    return f"{parsed.scheme}://{username}{host}{port}"
+
+
+def is_valid_proxy(proxy: str) -> bool:
+    try:
+        parsed = urlparse(proxy)
+        return (
+            parsed.scheme in {"http", "https"}
+            and parsed.hostname is not None
+            and parsed.port is not None
+        )
+    except ValueError:
+        return False
+
+
+def add_proxy_argument(command: list[str], proxy: Optional[str]) -> list[str]:
+    """Add yt-dlp's proxy argument only when a proxy is configured."""
+    if proxy:
+        command.extend(["--proxy", proxy])
+    return command
+
+
+def add_youtube_extractor_arguments(command: list[str], logger) -> list[str]:
+    """Configure automatic PO tokens for YouTube media requests."""
+    command.extend(
+        [
+            "--extractor-args",
+            f"youtube:player_client={YOUTUBE_PLAYER_CLIENT};pot_trace=true",
+            "--extractor-args",
+            f"youtubepot-bgutilhttp:base_url={POT_PROVIDER_URL}",
+        ]
+    )
+    if logger.isEnabledFor(logging.DEBUG):
+        command.append("--verbose")
+    return command
+
+
+def log_command(logger, stage: str, command: list[str], proxy: Optional[str]) -> None:
+    safe_command = [redact_proxy(value) if value == proxy else value for value in command]
+    logger.debug("%s command: %s", stage, " ".join(safe_command))
+    logger.debug("%s network route: %s", stage, redact_proxy(proxy))
+
+
+def run_download_command(command, logger, stage, proxy, check=True):
+    """Run yt-dlp and record diagnostics useful for download failures."""
+    log_command(logger, stage, command, proxy)
+    started_at = time.monotonic()
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    elapsed = time.monotonic() - started_at
+    logger.debug("%s finished: return_code=%s elapsed=%.2fs", stage, result.returncode, elapsed)
+    safe_stdout = result.stdout.replace(proxy, redact_proxy(proxy)) if proxy else result.stdout
+    safe_stderr = result.stderr.replace(proxy, redact_proxy(proxy)) if proxy else result.stderr
+    if safe_stdout.strip():
+        logger.debug("%s stdout:\n%s", stage, safe_stdout.strip())
+    if safe_stderr.strip():
+        log = logger.error if result.returncode else logger.debug
+        log("%s stderr:\n%s", stage, safe_stderr.strip())
+    if check and result.returncode:
+        raise RuntimeError(f"{stage} failed with return code {result.returncode}")
+    return result
 
 
 # Configure logging
@@ -329,6 +401,7 @@ def process_files(verbose: bool, watch: bool, compress: bool):
 @click.option("--url", help="Download from specific URL")
 @click.option("--tg-channel", help="Telegram channel ID for URL downloads")
 @click.option("--quality", default="64", help="Audio quality in kbps")
+@click.option("--proxy", help="Override database proxies for this run")
 @click.option("--random_sort", is_flag=True, help="Sort sources randomly")
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
 @click.option(
@@ -339,6 +412,7 @@ def download_youtube(
     url: Optional[str],
     tg_channel: Optional[int],
     quality: str,
+    proxy: Optional[str],
     random_sort: bool,
     verbose: bool,
     dry_run: bool,
@@ -357,6 +431,17 @@ def download_youtube(
     async def _download():
         await init_db()
         try:
+            if proxy and not is_valid_proxy(proxy):
+                raise click.UsageError(
+                    "--proxy must be an HTTP URL such as http://user:pass@ip:port"
+                )
+            proxy_candidates = [proxy] if proxy else await ProxyService.get_urls_randomized()
+            if not proxy_candidates:
+                proxy_candidates = [None]
+            selected_proxy = proxy_candidates[0]
+            logger.info("Download network route: %s", redact_proxy(selected_proxy))
+            if not selected_proxy:
+                logger.warning("No proxy is configured; downloads will use a direct connection")
             tg_channel_obj = None
             # Handle single URL download
             if url:
@@ -368,7 +453,13 @@ def download_youtube(
                 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
                 downloaded = await download_single_url(
-                    url, tg_channel_obj, quality, verbose, logger
+                    url,
+                    tg_channel_obj,
+                    quality,
+                    verbose,
+                    logger,
+                    selected_proxy,
+                    proxy_candidates,
                 )
                 if downloaded:
                     click.echo(f"✅ Downloaded: {downloaded['title']}")
@@ -413,7 +504,9 @@ def download_youtube(
 
                     click.echo(f"📺 Processing: {source.name}")
                     downloaded_count = await process_channel_download(
-                        source, source.max_videos_per_channel, quality, verbose, logger
+                        source, source.max_videos_per_channel, quality, verbose, logger,
+                        selected_proxy,
+                        proxy_candidates,
                     )
                     total_downloaded += downloaded_count
 
@@ -531,7 +624,9 @@ async def embed_metadata(podcast):
 
 
 async def process_channel_download(
-    source, max_videos: int, quality: str, verbose: bool, logger
+    source, max_videos: int, quality: str, verbose: bool, logger,
+    proxy: Optional[str] = None,
+    proxy_candidates: Optional[list[Optional[str]]] = None,
 ) -> int:
     """Process a YouTube channel for downloads."""
     try:
@@ -552,16 +647,15 @@ async def process_channel_download(
             # "/tmp/cookies.txt",
             # "--extractor-args",
             # "youtube:player-client=android_vr",
-            "--proxy",
-            "socks5://127.0.0.1:10808/",
             "--dump-json",
             "--flat-playlist",
             "--playlist-end",
             str(max_videos),
             source.url,
         ]
-        print(" ".join(cmd))
-        process = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        add_youtube_extractor_arguments(cmd, logger)
+        add_proxy_argument(cmd, proxy)
+        process = run_download_command(cmd, logger, "channel discovery", proxy)
         videos = [
             json.loads(line) for line in process.stdout.splitlines() if line.strip()
         ]
@@ -584,7 +678,7 @@ async def process_channel_download(
             print(f"Video url: {video_url}")
 
             # Get video info
-            video_info = get_video_info(video_url)
+            video_info = get_video_info(video_url, proxy, logger)
             if not video_info or "error" in video_info:
                 print(f"Did not get video info {video_info}")
                 continue
@@ -612,7 +706,29 @@ async def process_channel_download(
                 print("Podcast already downloaded, skiping")
                 continue
 
-            duration = video_info.get("duration", 0)
+            duration = video_info.get("duration")
+            if duration is None:
+                logger.warning(
+                    "Skipping video because yt-dlp returned no duration: "
+                    "video_id=%s url=%s title=%r",
+                    video_info.get("id"),
+                    video_url,
+                    video_info.get("title"),
+                )
+                continue
+
+            try:
+                duration = int(duration)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Skipping video because yt-dlp returned an invalid duration: "
+                    "video_id=%s duration=%r url=%s",
+                    video_info.get("id"),
+                    duration,
+                    video_url,
+                )
+                continue
+
             if duration < source.min_duration or duration > source.max_duration:
                 print(
                     f"Video is too small or too big: {duration // 60} min {duration % 60 } seconds"
@@ -643,7 +759,13 @@ async def process_channel_download(
             if podcast.is_active:
                 # Download
                 logger.info(f"Downloading new audio: {video_url}: {podcast.name}")
-                downloaded = download_audio(video_url, channel_dir, quality)
+                downloaded = download_audio_with_retries(
+                    video_url,
+                    channel_dir,
+                    quality,
+                    proxy_candidates or [proxy],
+                    logger,
+                )
                 time.sleep(10)
             else:
                 downloaded = False
@@ -652,9 +774,15 @@ async def process_channel_download(
                 # Download thumbnail
                 thumbnail_path = f"{downloaded.get('file_path')}-thumb.jpg"
                 async with aiohttp.ClientSession() as session:
+                    successful_proxy = downloaded.get("proxy")
+                    logger.debug(
+                        "Downloading thumbnail via %s",
+                        redact_proxy(successful_proxy),
+                    )
                     async with session.get(
-                        podcast.thumbnail_url, proxy="socks5://127.0.0.1:10808/"
+                        podcast.thumbnail_url, proxy=successful_proxy
                     ) as response:
+                        logger.debug("Thumbnail response status: %s", response.status)
                         if response.status == 200:
                             with open(thumbnail_path, "wb") as f:
                                 f.write(await response.read())
@@ -681,13 +809,19 @@ async def process_channel_download(
         return 0
 
 
-def get_video_info(url):
+def get_video_info(url, proxy: Optional[str] = None, logger=None):
     """Get video information using yt-dlp."""
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
-        "proxy": "socks5://127.0.0.1:10808/",
+        "extractor_args": {
+            "youtube": {
+                "player_client": [YOUTUBE_PLAYER_CLIENT],
+                "pot_trace": ["true"],
+            },
+            "youtubepot-bgutilhttp": {"base_url": [POT_PROVIDER_URL]},
+        },
         # "extractor-args": "youtube:player-client=android_vr",
         # "cookiesfrombrowser": (
         #    "chromium",
@@ -698,6 +832,11 @@ def get_video_info(url):
         # "--extractor-args",
         # "youtube:player-client=default,tv"
     }
+    if proxy:
+        ydl_opts["proxy"] = proxy
+    if logger:
+        ydl_opts["verbose"] = logger.isEnabledFor(logging.DEBUG)
+        logger.debug("Extracting video metadata for %s via %s", url, redact_proxy(proxy))
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -717,17 +856,17 @@ def get_video_info(url):
         return {"error": str(e)}
 
 
-def download_audio(video_url, output_path, quality="64"):
+def download_audio(video_url, output_path, quality="64", proxy=None, logger=None):
     """Download YouTube video as MP3."""
     try:
+        logger = logger or logging.getLogger(__name__)
         os.makedirs(output_path, exist_ok=True)
+        logger.debug("Download output directory: %s", os.path.abspath(output_path))
 
         # Get video info first
         info_cmd = [
             "yt-dlp",
             "--dump-json",
-            "--proxy",
-            "socks5://127.0.0.1:10808/",
             # "--cookies-from-browser",
             # "firefox",
             # "--cookies-from-browser",
@@ -739,9 +878,9 @@ def download_audio(video_url, output_path, quality="64"):
             "--no-playlist",
             video_url,
         ]
-        info_process = subprocess.run(
-            info_cmd, capture_output=True, text=True, check=True
-        )
+        add_youtube_extractor_arguments(info_cmd, logger)
+        add_proxy_argument(info_cmd, proxy)
+        info_process = run_download_command(info_cmd, logger, "video metadata", proxy)
         video_info = json.loads(info_process.stdout)
 
         # Extract upload date
@@ -768,8 +907,6 @@ def download_audio(video_url, output_path, quality="64"):
             "--embed-thumbnail",
             "--add-metadata",
             "--no-playlist",
-            "--proxy",
-            "socks5://127.0.0.1:10808/",
             # "--extractor-args",
             # "youtube:player-client=android_vr",
             # "--cookies-from-browser",
@@ -782,22 +919,18 @@ def download_audio(video_url, output_path, quality="64"):
             output_template,
             video_url,
         ]
+        add_youtube_extractor_arguments(cmd, logger)
+        add_proxy_argument(cmd, proxy)
 
         print("Downloading...")
         print("=" * 20)
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        except subprocess.CalledProcessError as e:
-            print(e.stdout)
-            print(e.stderr)
-            # print(result.stdout)
-            # print(result.stderr)
-        else:
-            print("Done")
+        result = run_download_command(cmd, logger, "audio download", proxy)
+        print("Done")
         print("=" * 20)
         # Check for output file
         expected_filename = f"{video_info.get('id')}.mp3"
         expected_path = os.path.join(output_path, expected_filename)
+        logger.debug("Expected downloaded file: %s", os.path.abspath(expected_path))
         time.sleep(4)
         if os.path.exists(expected_path):
             return {
@@ -815,19 +948,60 @@ def download_audio(video_url, output_path, quality="64"):
             print(f"File not found: {expected_path}")
 
         return None
-
     except Exception:
         print(traceback.format_exc())
         return None
 
 
+def download_audio_with_retries(
+    video_url: str,
+    output_path: str,
+    quality: str,
+    proxies: list[Optional[str]],
+    logger,
+):
+    """Try an audio download through each configured proxy in order."""
+    attempts = proxies or [None]
+    for attempt, candidate in enumerate(attempts, start=1):
+        logger.info(
+            "Audio download attempt %s/%s via %s",
+            attempt,
+            len(attempts),
+            redact_proxy(candidate),
+        )
+        downloaded = download_audio(
+            video_url, output_path, quality, candidate, logger
+        )
+        if downloaded:
+            downloaded["proxy"] = candidate
+            if attempt > 1:
+                logger.info(
+                    "Audio download succeeded after proxy rotation via %s",
+                    redact_proxy(candidate),
+                )
+            return downloaded
+        logger.warning(
+            "Audio download attempt failed via %s",
+            redact_proxy(candidate),
+        )
+
+    logger.error(
+        "Audio download failed through all %s configured network routes: %s",
+        len(attempts),
+        video_url,
+    )
+    return None
+
+
 async def download_single_url(
-    url: str, tg_channel_obj, quality: str, verbose: bool, logger
+    url: str, tg_channel_obj, quality: str, verbose: bool, logger,
+    proxy: Optional[str] = None,
+    proxy_candidates: Optional[list[Optional[str]]] = None,
 ) -> dict:
     """Download a single URL and create podcast entry."""
     try:
         # Get video info
-        video_info = get_video_info(url)
+        video_info = get_video_info(url, proxy, logger)
         if not video_info or "error" in video_info:
             logger.error(f"Failed to get video info for {url}")
             return None
@@ -846,7 +1020,9 @@ async def download_single_url(
 
         # Download the audio
         logger.info(f"Downloading: {video_info.get('title')}")
-        downloaded = download_audio(url, download_dir, quality)
+        downloaded = download_audio_with_retries(
+            url, download_dir, quality, proxy_candidates or [proxy], logger
+        )
 
         if not downloaded:
             logger.error(f"Failed to download {url}")
@@ -880,8 +1056,9 @@ async def download_single_url(
             thumbnail_path = f"{downloaded.get('file_path')}-thumb.jpg"
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    video_info.get("thumbnail"), proxy="socks5://127.0.0.1:10808/"
+                    video_info.get("thumbnail"), proxy=downloaded.get("proxy")
                 ) as response:
+                    logger.debug("Thumbnail response status: %s", response.status)
                     if response.status == 200:
                         with open(thumbnail_path, "wb") as f:
                             f.write(await response.read())

@@ -55,6 +55,19 @@ class BannedWords(models.Model):
         table = "banned_words"
 
 
+class Proxy(models.Model):
+    """HTTP proxy used by yt-dlp and thumbnail downloads."""
+
+    id = fields.IntField(pk=True)
+    url = fields.CharField(max_length=500, unique=True)
+
+    def __str__(self):
+        return self.url
+
+    class Meta:
+        table = "proxy"
+
+
 class TgChannel(models.Model):
     id = fields.IntField(pk=True)
     name = fields.CharField(max_length=100)

@@ -1,5 +1,6 @@
 """Services for podcaster project"""
 
+import random
 import traceback
 from datetime import datetime, timedelta
 
@@ -14,9 +15,62 @@ from app.models import (
     Podcast,
     TgChannel,
     BannedWords,
+    Proxy,
 )
 
 PUBLICATION_SPEED = 60 * 4  # 4 hourse
+
+
+class ProxyService:
+    """CRUD and selection operations for download proxies."""
+
+    @staticmethod
+    async def get_all() -> List[Proxy]:
+        return await Proxy.all().order_by("-id")
+
+    @staticmethod
+    async def get_by_id(id: int) -> Optional[Proxy]:
+        try:
+            return await Proxy.get(id=id)
+        except DoesNotExist:
+            return None
+
+    @staticmethod
+    async def get_random_url() -> Optional[str]:
+        proxies = await Proxy.all()
+        return random.choice(proxies).url if proxies else None
+
+    @staticmethod
+    async def get_urls_randomized() -> List[str]:
+        urls = [proxy.url for proxy in await Proxy.all()]
+        random.shuffle(urls)
+        return urls
+
+    @staticmethod
+    async def create(url: str) -> Optional[Proxy]:
+        try:
+            return await Proxy.create(url=url)
+        except IntegrityError:
+            return None
+
+    @staticmethod
+    async def update(id: int, url: str) -> Optional[Proxy]:
+        try:
+            proxy = await Proxy.get(id=id)
+            proxy.url = url
+            await proxy.save()
+            return proxy
+        except (DoesNotExist, IntegrityError):
+            return None
+
+    @staticmethod
+    async def delete(id: int) -> bool:
+        try:
+            proxy = await Proxy.get(id=id)
+            await proxy.delete()
+            return True
+        except DoesNotExist:
+            return False
 
 
 class CategoryService:

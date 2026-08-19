@@ -35,3 +35,4 @@ _index/
 media/
 *.log
 cookies.txt
+.pot-provider/
