@@ -99,9 +99,17 @@ Start the provider in a separate terminal before running downloads:
 scripts/start-pot-provider.sh
 ```
 
+The start script removes inherited proxy environment variables from the Node.js
+process. yt-dlp supplies the selected download proxy with each token request;
+keeping both mechanisms enabled would proxy the provider's Axios requests twice.
+
 The application connects to `http://127.0.0.1:4416` by default. Override this
 with `POT_PROVIDER_URL`. Run `podcast download --verbose` to include PO-token
 provider trace information in the download log.
+
+Downloads also use yt-dlp's Chrome impersonation through `curl-cffi`. This is
+required when Googlevideo accepts the PO token but rejects yt-dlp's default
+HTTP/TLS fingerprint with status 403.
 
 ### Run Web Interface
 ```bash

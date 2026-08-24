@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 
 {% block content %}
+<script>
+function toggleSourceEdit(sourceId) {
+    const row = document.getElementById(`source-${sourceId}`);
+    row.querySelectorAll('.source-view, .source-edit').forEach((element) => {
+        element.hidden = !element.hidden;
+    });
+}
+</script>
 <div class="">
     <h1 class="">Каналы</h1>
     
@@ -20,6 +28,10 @@
             <tbody id="sources-table">
               {% for i in sources %}
               {% set source = i.source %}
+              {% set total = i.total %}
+              {% set total_posted = i.total_posted %}
+              {% set total_week = i.total_week %}
+              {% set total_month = i.total_month %}
               {% include "sources/row.html" %}
               {% endfor %}
             </tbody>

@@ -240,12 +240,24 @@ class SourceService:
             return None
 
     @staticmethod
-    async def update(id: int, url: str, name: str) -> Optional[Source]:
+    async def update(
+        id: int,
+        url: str,
+        name: str,
+        tg_channel_id: Optional[int],
+        min_duration: int,
+        max_videos_per_channel: int,
+        only_related: bool,
+    ) -> Optional[Source]:
         """Update source"""
         try:
             source = await Source.get(id=id)
             source.url = url
             source.name = name
+            source.tg_channel_id = tg_channel_id
+            source.min_duration = min_duration
+            source.max_videos_per_channel = max_videos_per_channel
+            source.only_related = only_related
             await source.save()
             return source
         except DoesNotExist:

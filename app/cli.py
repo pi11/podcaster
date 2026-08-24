@@ -10,6 +10,7 @@ import json
 import time
 import traceback
 import random
+import re
 
 from typing import Optional, Literal
 from pathlib import Path
@@ -52,6 +53,19 @@ def redact_proxy(proxy: Optional[str]) -> str:
     return f"{parsed.scheme}://{username}{host}{port}"
 
 
+def redact_po_tokens(value: str) -> str:
+    """Remove short-lived YouTube PO tokens from verbose yt-dlp output."""
+    value = re.sub(
+        r"(?i)(Generated POT:\s*)\S+", r"\1***REDACTED***", value
+    )
+    value = re.sub(
+        r"(?i)(po_token=')([^']+)", r"\1***REDACTED***", value
+    )
+    return re.sub(
+        r"(?i)([?&]pot=)[^&\s]+", r"\1***REDACTED***", value
+    )
+
+
 def is_valid_proxy(proxy: str) -> bool:
     try:
         parsed = urlparse(proxy)
@@ -75,6 +89,8 @@ def add_youtube_extractor_arguments(command: list[str], logger) -> list[str]:
     """Configure automatic PO tokens for YouTube media requests."""
     command.extend(
         [
+            "--impersonate",
+            "chrome",
             "--extractor-args",
             f"youtube:player_client={YOUTUBE_PLAYER_CLIENT};pot_trace=true",
             "--extractor-args",
@@ -101,6 +117,8 @@ def run_download_command(command, logger, stage, proxy, check=True):
     logger.debug("%s finished: return_code=%s elapsed=%.2fs", stage, result.returncode, elapsed)
     safe_stdout = result.stdout.replace(proxy, redact_proxy(proxy)) if proxy else result.stdout
     safe_stderr = result.stderr.replace(proxy, redact_proxy(proxy)) if proxy else result.stderr
+    safe_stdout = redact_po_tokens(safe_stdout)
+    safe_stderr = redact_po_tokens(safe_stderr)
     if safe_stdout.strip():
         logger.debug("%s stdout:\n%s", stage, safe_stdout.strip())
     if safe_stderr.strip():

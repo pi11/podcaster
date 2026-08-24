@@ -1,31 +1,49 @@
-                    <tr id="source-{{ source.id }}" class="hover:bg-gray-50">
-                        <td>{{ source.id }}</td>
-                        <td>
-                            {{ source.name }}
-                        </td>
-                        <td>
-                          Всего:&nbsp;<a href="/podcasts?source_id={{ source.id }}"><b>{{ i.total }}</b></a><br />
-                          Загружено:&nbsp;<b>{{ i.total_posted }}</b><br />
-                          Неделя:&nbsp;<b>{{ i.total_week }}</b><br />
-                          Месяц:&nbsp;<b>{{ i.total_month }}</b><br />
-                        </td>
-                        <td>
-                            <span id="source-url-{{ source.id }}" style="max-width:400px; overflow: hidden; display: flex;">
-                                <a href="{{ source.url }}" target="_blank" class="text-blue-600 hover:underline truncate block max-w-xs">
-                                    {{ source.url }}
-                                </a>
-                            </span>
-                          </td>
-                          <td>
-                            <a href="/podcasts?tg_id={{ source.tg_channel.id }}">{{ source.tg_channel }}</a>
-                          </td>
-                        <td>
-                                <button hx-post="/sources/{{ source.id }}/delete"
-                                        hx-confirm="Are you sure you want to delete this source? This will also delete all associated podcasts."
-                                        hx-target="#source-{{ source.id }}"
-                                        hx-swap="outerHTML"
-                                        class="btn">
-                                    Delete
-                                </button>
-                        </td>
-                    </tr>
+<tr id="source-{{ source.id }}" class="hover:bg-gray-50">
+  <td>{{ source.id }}</td>
+  <td>
+    <span class="source-view">{{ source.name }}</span>
+    <input class="source-edit" form="source-form-{{ source.id }}" type="text" name="name" value="{{ source.name }}" required hidden>
+  </td>
+  <td>
+    Всего:&nbsp;<a href="/podcasts?source_id={{ source.id }}"><b>{{ total }}</b></a><br>
+    Загружено:&nbsp;<b>{{ total_posted }}</b><br>
+    Неделя:&nbsp;<b>{{ total_week }}</b><br>
+    Месяц:&nbsp;<b>{{ total_month }}</b>
+  </td>
+  <td>
+    <span class="source-view" style="max-width:400px; overflow:hidden">
+      <a href="{{ source.url }}" target="_blank" class="text-blue-600 hover:underline truncate block max-w-xs">{{ source.url }}</a>
+    </span>
+    <div class="source-edit" hidden>
+      <input form="source-form-{{ source.id }}" type="url" name="url" value="{{ source.url }}" required>
+      <label>Мин. длительность (сек)</label>
+      <input form="source-form-{{ source.id }}" type="number" name="min_duration" value="{{ source.min_duration }}" min="0" required>
+      <label>Максимум видео</label>
+      <input form="source-form-{{ source.id }}" type="number" name="max_videos_per_channel" value="{{ source.max_videos_per_channel }}" min="1" required>
+      <label>
+        <input form="source-form-{{ source.id }}" type="checkbox" name="only_related" value="check" style="width:auto" {% if source.only_related %}checked{% endif %}>
+        Проверять соответствие категориям
+      </label>
+    </div>
+  </td>
+  <td>
+    <span class="source-view">
+      {% if source.tg_channel_id %}<a href="/podcasts?tg_id={{ source.tg_channel_id }}">{{ source.tg_channel }}</a>{% else %}—{% endif %}
+    </span>
+    <select class="source-edit" form="source-form-{{ source.id }}" name="tg_id" hidden>
+      <option value="">Без Telegram-канала</option>
+      {% for tg in tgs %}
+        <option value="{{ tg.id }}" {% if tg.id == source.tg_channel_id %}selected{% endif %}>{{ tg.name }}</option>
+      {% endfor %}
+    </select>
+  </td>
+  <td>
+    <form id="source-form-{{ source.id }}" hx-post="/sources/{{ source.id }}" hx-target="#source-{{ source.id }}" hx-swap="outerHTML"></form>
+    <button type="button" class="source-view btn" onclick="toggleSourceEdit({{ source.id }})">Edit</button>
+    <button type="submit" form="source-form-{{ source.id }}" class="source-edit btn" hidden>Save</button>
+    <button type="button" class="source-edit btn" onclick="toggleSourceEdit({{ source.id }})" hidden>Cancel</button>
+    <button class="source-view btn" hx-post="/sources/{{ source.id }}/delete"
+            hx-confirm="Are you sure you want to delete this source? This will also delete all associated podcasts."
+            hx-target="#source-{{ source.id }}" hx-swap="outerHTML">Delete</button>
+  </td>
+</tr>

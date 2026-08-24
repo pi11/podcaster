@@ -37,6 +37,43 @@ def normalize_proxy_url(value):
     return value
 
 
+def parse_source_form(request):
+    """Validate and normalize fields shared by source create/update forms."""
+    url = (request.form.get("url") or "").strip()
+    name = (request.form.get("name") or "").strip()
+    if not url or not name:
+        return None, "Name and URL are required"
+    try:
+        min_duration = int(request.form.get("min_duration", 1800))
+        max_videos = int(request.form.get("max_videos_per_channel", 15))
+        tg_channel_id = request.form.get("tg_id")
+        tg_channel_id = int(tg_channel_id) if tg_channel_id else None
+    except (TypeError, ValueError):
+        return None, "Duration, video limit, and Telegram channel must be valid numbers"
+    if min_duration < 0 or max_videos < 1:
+        return None, "Duration cannot be negative and video limit must be at least 1"
+    return {
+        "url": url,
+        "name": name,
+        "tg_channel_id": tg_channel_id,
+        "min_duration": min_duration,
+        "max_videos_per_channel": max_videos,
+        "only_related": bool(request.form.get("only_related")),
+    }, None
+
+
+async def source_row_context(source):
+    """Build the complete context needed by a source table row."""
+    return {
+        "source": source,
+        "total": await SourceService.get_total(source.id),
+        "total_posted": await SourceService.get_total_posted(source.id),
+        "total_week": await SourceService.get_total_week(source.id),
+        "total_month": await SourceService.get_total_month(source.id),
+        "tgs": await TgService.get_all(),
+    }
+
+
 @bp.route("/", methods=["GET"])
 async def index(request):
     """Render index page"""
@@ -313,30 +350,35 @@ async def sources_list(request):
 @bp.route("/sources", methods=["POST"])
 async def sources_create(request):
     """Create new source"""
-    url = request.form.get("url")
-    name = request.form.get("name")
-    tg_channel = request.form.get("tg_id")
-    min_duration = request.form.get("min_duration", 1800)
-    max_videos_per_channel = request.form.get("max_videos_per_channel")
-    only_related = request.form.get("only_related", False)
-
-    if not url or not name:
-        return response.text("All fields are required", status=400)
-
-    source = await SourceService.create(url=url, name=name)
-    if tg_channel:
-        source.tg_channel_id = int(tg_channel)
-    source.max_videos_per_channel = int(max_videos_per_channel)
-    source.only_related = only_related
-    source.min_duration = min_duration
-    await source.save()
-
+    values, error = parse_source_form(request)
+    if error:
+        return response.text(error, status=400)
+    source = await SourceService.create(url=values["url"], name=values["name"])
     if not source:
         return response.text("Source with this URL already exists", status=400)
+    source.tg_channel_id = values["tg_channel_id"]
+    source.max_videos_per_channel = values["max_videos_per_channel"]
+    source.only_related = values["only_related"]
+    source.min_duration = values["min_duration"]
+    await source.save()
 
     if request.headers.get("HX-Request"):
-        return await render("sources/row.html", context={"source": source})
+        return await render("sources/row.html", context=await source_row_context(source))
 
+    return response.redirect("/sources")
+
+
+@bp.route("/sources/<source_id:int>", methods=["POST"])
+async def sources_update(request, source_id):
+    """Update an existing source."""
+    values, error = parse_source_form(request)
+    if error:
+        return response.text(error, status=400)
+    source = await SourceService.update(id=source_id, **values)
+    if not source:
+        return response.text("Source not found or URL already exists", status=400)
+    if request.headers.get("HX-Request"):
+        return await render("sources/row.html", context=await source_row_context(source))
     return response.redirect("/sources")
 
 
