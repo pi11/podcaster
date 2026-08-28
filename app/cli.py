@@ -11,6 +11,7 @@ import time
 import traceback
 import random
 import re
+import urllib.request
 
 from typing import Optional, Literal
 from pathlib import Path
@@ -39,7 +40,24 @@ MAX_VIDEOS_PER_CHANNEL = 20
 MAX_VIDEO_AGE_DAYS = 1400
 DOWNLOAD_AUDIO_QUALITY = "64"
 POT_PROVIDER_URL = os.getenv("POT_PROVIDER_URL", "http://127.0.0.1:4416")
-YOUTUBE_PLAYER_CLIENT = "mweb"
+YOUTUBE_PLAYER_CLIENT = "tv_simply"
+YOUTUBE_FALLBACK_CLIENTS = tuple(
+    client.strip()
+    for client in os.getenv(
+        "YOUTUBE_FALLBACK_CLIENTS", "mweb,android_vr,web_safari"
+    ).split(",")
+    if client.strip()
+)
+
+
+class DownloadCommandError(RuntimeError):
+    """A failed yt-dlp subprocess with output retained for retry decisions."""
+
+    def __init__(self, stage: str, returncode: int, stderr: str):
+        super().__init__(f"{stage} failed with return code {returncode}")
+        self.stage = stage
+        self.returncode = returncode
+        self.stderr = stderr
 
 
 def redact_proxy(proxy: Optional[str]) -> str:
@@ -85,14 +103,16 @@ def add_proxy_argument(command: list[str], proxy: Optional[str]) -> list[str]:
     return command
 
 
-def add_youtube_extractor_arguments(command: list[str], logger) -> list[str]:
+def add_youtube_extractor_arguments(
+    command: list[str], logger, player_client: str = YOUTUBE_PLAYER_CLIENT
+) -> list[str]:
     """Configure automatic PO tokens for YouTube media requests."""
     command.extend(
         [
             "--impersonate",
             "chrome",
             "--extractor-args",
-            f"youtube:player_client={YOUTUBE_PLAYER_CLIENT};pot_trace=true",
+            f"youtube:player_client={player_client};pot_trace=true",
             "--extractor-args",
             f"youtubepot-bgutilhttp:base_url={POT_PROVIDER_URL}",
         ]
@@ -125,8 +145,47 @@ def run_download_command(command, logger, stage, proxy, check=True):
         log = logger.error if result.returncode else logger.debug
         log("%s stderr:\n%s", stage, safe_stderr.strip())
     if check and result.returncode:
-        raise RuntimeError(f"{stage} failed with return code {result.returncode}")
+        raise DownloadCommandError(stage, result.returncode, safe_stderr)
     return result
+
+
+def check_pot_provider(logger) -> bool:
+    """Check the local/remote HTTP PO-token provider before a download run."""
+    ping_url = f"{POT_PROVIDER_URL.rstrip('/')}/ping"
+    try:
+        # Do not inherit an outbound proxy for a normally local provider.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(ping_url, timeout=3) as response:
+            healthy = 200 <= response.status < 300
+    except Exception as exc:
+        logger.error("PO-token provider is unavailable at %s: %s", ping_url, exc)
+        return False
+    if healthy:
+        logger.debug("PO-token provider is healthy at %s", ping_url)
+    return healthy
+
+
+def is_retryable_youtube_failure(error: DownloadCommandError) -> bool:
+    """Return whether another cookie-free client/format may help."""
+    message = error.stderr.lower()
+    return any(
+        marker in message
+        for marker in (
+            "http error 403",
+            "requested format is not available",
+            "no video formats found",
+            "no formats found",
+        )
+    )
+
+
+def is_members_only_error(error: object) -> bool:
+    """Identify YouTube's explicit channel-members access restriction."""
+    message = str(error).lower()
+    return (
+        "available to this channel's members" in message
+        or "members-only content" in message
+    )
 
 
 # Configure logging
@@ -449,6 +508,12 @@ def download_youtube(
     async def _download():
         await init_db()
         try:
+            if not dry_run and not check_pot_provider(logger):
+                logger.warning(
+                    "PO-token provider is not running; tv_simply and other "
+                    "non-PO-token strategies can still be attempted. Start it "
+                    "with scripts/start-pot-provider.sh to enable mweb fallback"
+                )
             if proxy and not is_valid_proxy(proxy):
                 raise click.UsageError(
                     "--proxy must be an HTTP URL such as http://user:pass@ip:port"
@@ -480,7 +545,10 @@ def download_youtube(
                     proxy_candidates,
                 )
                 if downloaded:
-                    click.echo(f"✅ Downloaded: {downloaded['title']}")
+                    if downloaded.get("already_downloaded"):
+                        click.echo(f"ℹ️ Already downloaded: {downloaded['title']}")
+                    else:
+                        click.echo(f"✅ Downloaded: {downloaded['title']}")
                 else:
                     click.echo("❌ Failed to download from URL")
                 return
@@ -688,6 +756,9 @@ async def process_channel_download(
                 if podcast.is_downloaded:
                     print(f"Podcast already downloaded: {podcast}, skipping")
                     continue
+                elif not podcast.is_active:
+                    logger.info("Podcast is inactive, skipping: %s", podcast.name)
+                    continue
                 else:
                     print(f"Downloading previously added podcast: {podcast}")
                     time.sleep(random.randint(1, 3))
@@ -698,6 +769,36 @@ async def process_channel_download(
             # Get video info
             video_info = get_video_info(video_url, proxy, logger)
             if not video_info or "error" in video_info:
+                error = video_info.get("error", "unknown error") if video_info else "unknown error"
+                if is_members_only_error(error):
+                    logger.info(
+                        "Marking members-only video inactive: video_id=%s url=%s",
+                        video["id"],
+                        video_url,
+                    )
+                    if podcast:
+                        podcast.is_active = False
+                        await podcast.save()
+                    else:
+                        nd = await PodcastService.get_next_publication_date()
+                        await PodcastService.create(
+                            {
+                                "name": video.get("title") or video["id"],
+                                "description": video.get("description", ""),
+                                "url": video_url,
+                                "source_id": source.id,
+                                "tg_channel_id": source.tg_channel_id,
+                                "yt_id": video["id"],
+                                "publication_date": nd,
+                                "is_active": False,
+                                "is_processed": False,
+                                "file": None,
+                                "duration": video.get("duration"),
+                                "is_posted": False,
+                                "is_downloaded": False,
+                                "thumbnail_url": video.get("thumbnail", ""),
+                            }
+                        )
                 print(f"Did not get video info {video_info}")
                 continue
 
@@ -911,38 +1012,65 @@ def download_audio(video_url, output_path, quality="64", proxy=None, logger=None
         else:
             upload_date = datetime.now()
 
-        # Download command
+        # Download command. A valid PO token can still be rejected for one
+        # client/format/CDN combination, so retry cookie-free alternatives
+        # before giving up on the current network route.
         output_template = os.path.join(output_path, "%(id)s.%(ext)s")
-        cmd = [
-            "yt-dlp",
-            "-f",
-            "bestaudio",
-            "--extract-audio",
-            "--audio-format",
-            "mp3",
-            "--audio-quality",
-            quality,
-            "--embed-thumbnail",
-            "--add-metadata",
-            "--no-playlist",
-            # "--extractor-args",
-            # "youtube:player-client=android_vr",
-            # "--cookies-from-browser",
-            # "firefox",
-            # "--cookies-from-browser",
-            # "chromium:Default",
-            # "--cookies",
-            # "/tmp/cookies.txt",
-            "-o",
-            output_template,
-            video_url,
+        strategies = [
+            (YOUTUBE_PLAYER_CLIENT, "bestaudio"),
+            *((client, "bestaudio/best") for client in YOUTUBE_FALLBACK_CLIENTS),
         ]
-        add_youtube_extractor_arguments(cmd, logger)
-        add_proxy_argument(cmd, proxy)
-
+        last_error = None
         print("Downloading...")
         print("=" * 20)
-        result = run_download_command(cmd, logger, "audio download", proxy)
+        for strategy_number, (player_client, format_selector) in enumerate(
+            strategies, start=1
+        ):
+            cmd = [
+                "yt-dlp",
+                "-f",
+                format_selector,
+                "--extract-audio",
+                "--audio-format",
+                "mp3",
+                "--audio-quality",
+                quality,
+                "--embed-thumbnail",
+                "--add-metadata",
+                "--no-playlist",
+                "-o",
+                output_template,
+                video_url,
+            ]
+            add_youtube_extractor_arguments(cmd, logger, player_client)
+            add_proxy_argument(cmd, proxy)
+            logger.info(
+                "YouTube strategy %s/%s: client=%s format=%s",
+                strategy_number,
+                len(strategies),
+                player_client,
+                format_selector,
+            )
+            try:
+                run_download_command(
+                    cmd,
+                    logger,
+                    f"audio download ({player_client}, {format_selector})",
+                    proxy,
+                )
+                last_error = None
+                break
+            except DownloadCommandError as exc:
+                last_error = exc
+                if not is_retryable_youtube_failure(exc):
+                    raise
+                logger.warning(
+                    "YouTube strategy failed: client=%s format=%s",
+                    player_client,
+                    format_selector,
+                )
+        if last_error:
+            raise last_error
         print("Done")
         print("=" * 20)
         # Check for output file
@@ -1028,10 +1156,22 @@ async def download_single_url(
         existing_podcast = await Podcast.filter(url=url).first()
         if existing_podcast:
             logger.info(f"Podcast already exists: {existing_podcast.name}")
-            time.sleep(10)
-            logger.info(f"Sleeping for 10 seconds...")
-
-            return {"title": existing_podcast.name}
+            existing_file = existing_podcast.file
+            if (
+                existing_podcast.is_downloaded
+                and existing_file
+                and os.path.isfile(existing_file)
+            ):
+                return {
+                    "title": existing_podcast.name,
+                    "id": existing_podcast.id,
+                    "already_downloaded": True,
+                }
+            logger.warning(
+                "Existing podcast has no downloaded file; retrying download: id=%s file=%r",
+                existing_podcast.id,
+                existing_file,
+            )
 
         # Create directory for download
         download_dir = os.path.join(OUTPUT_DIR, "single_downloads")
@@ -1067,7 +1207,17 @@ async def download_single_url(
             "thumbnail_url": video_info.get("thumbnail", ""),
         }
 
-        podcast = await PodcastService.create(podcast_data)
+        if existing_podcast:
+            for field, value in podcast_data.items():
+                if field not in {"source_id", "tg_channel_id"}:
+                    setattr(existing_podcast, field, value)
+            if tg_channel_obj:
+                existing_podcast.tg_channel_id = tg_channel_obj.id
+            await existing_podcast.save()
+            podcast = existing_podcast
+            logger.info("Updated existing podcast after download: %s", podcast.name)
+        else:
+            podcast = await PodcastService.create(podcast_data)
 
         # Download thumbnail
         if video_info.get("thumbnail"):
@@ -1085,7 +1235,7 @@ async def download_single_url(
                         podcast.thumbnail = thumbnail_path
                         await podcast.save()
 
-        logger.info(f"Created podcast: {podcast.name}")
+        logger.info(f"Saved downloaded podcast: {podcast.name}")
 
         if verbose:
             click.echo(f"  📁 File: {downloaded.get('file_path')}")

@@ -44,6 +44,8 @@ TG_CHANNEL=@your_channel_name
 DEBUG=False
 MEDIA_DIR=media
 POT_PROVIDER_URL=http://127.0.0.1:4416
+# Cookie-free clients tried after the primary tv_simply download fails
+YOUTUBE_FALLBACK_CLIENTS=mweb,android_vr,web_safari
 ```
 
 ### Database Initialization
@@ -85,8 +87,9 @@ connection. Debug logs redact proxy passwords.
 
 ### YouTube PO tokens
 
-YouTube media downloads use the `mweb` client with automatically generated GVS
-PO tokens. Install the Python dependencies and build the local Node.js provider:
+YouTube media downloads use the cookie-free `tv_simply` client first. The
+fallback list includes `mweb`, which uses automatically generated GVS PO tokens.
+Install the Python dependencies and build the local Node.js provider:
 
 ```bash
 poetry install
@@ -110,6 +113,11 @@ provider trace information in the download log.
 Downloads also use yt-dlp's Chrome impersonation through `curl-cffi`. This is
 required when Googlevideo accepts the PO token but rejects yt-dlp's default
 HTTP/TLS fingerprint with status 403.
+
+If a Googlevideo media request returns 403, the downloader tries the cookie-free
+clients in `YOUTUBE_FALLBACK_CLIENTS`. Set the variable to an empty value to
+disable client fallbacks. The downloader checks the provider's `/ping` endpoint
+before processing channels and warns if the `mweb` fallback will be unavailable.
 
 ### Run Web Interface
 ```bash
