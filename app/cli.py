@@ -60,6 +60,10 @@ class DownloadCommandError(RuntimeError):
         self.stderr = stderr
 
 
+class MembersOnlyVideoError(RuntimeError):
+    """A video cannot be downloaded without a channel membership."""
+
+
 def redact_proxy(proxy: Optional[str]) -> str:
     """Return a log-safe proxy URL without its password."""
     if not proxy:
@@ -111,6 +115,8 @@ def add_youtube_extractor_arguments(
         [
             "--impersonate",
             "chrome",
+            "--remote-components",
+            "ejs:github",
             "--extractor-args",
             f"youtube:player_client={player_client};pot_trace=true",
             "--extractor-args",
@@ -181,7 +187,13 @@ def is_retryable_youtube_failure(error: DownloadCommandError) -> bool:
 
 def is_members_only_error(error: object) -> bool:
     """Identify YouTube's explicit channel-members access restriction."""
-    message = str(error).lower()
+    # DownloadCommandError deliberately has a concise __str__, while yt-dlp's
+    # useful explanation is retained in stderr.
+    message = " ".join(
+        part
+        for part in (str(error), getattr(error, "stderr", ""))
+        if part
+    ).lower()
     return (
         "available to this channel's members" in message
         or "members-only content" in message
@@ -878,13 +890,23 @@ async def process_channel_download(
             if podcast.is_active:
                 # Download
                 logger.info(f"Downloading new audio: {video_url}: {podcast.name}")
-                downloaded = download_audio_with_retries(
-                    video_url,
-                    channel_dir,
-                    quality,
-                    proxy_candidates or [proxy],
-                    logger,
-                )
+                try:
+                    downloaded = download_audio_with_retries(
+                        video_url,
+                        channel_dir,
+                        quality,
+                        proxy_candidates or [proxy],
+                        logger,
+                    )
+                except MembersOnlyVideoError:
+                    logger.info(
+                        "Marking members-only video inactive: video_id=%s url=%s",
+                        video["id"],
+                        video_url,
+                    )
+                    podcast.is_active = False
+                    await podcast.save()
+                    continue
                 time.sleep(10)
             else:
                 downloaded = False
@@ -934,6 +956,11 @@ def get_video_info(url, proxy: Optional[str] = None, logger=None):
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
+        # Metadata extraction must not depend on yt-dlp finding a format that
+        # matches its default download selector. The actual audio download
+        # below has its own client/format fallback strategies.
+        "ignore_no_formats_error": True,
+        "remote_components": ["ejs:github"],
         "extractor_args": {
             "youtube": {
                 "player_client": [YOUTUBE_PLAYER_CLIENT],
@@ -986,6 +1013,7 @@ def download_audio(video_url, output_path, quality="64", proxy=None, logger=None
         info_cmd = [
             "yt-dlp",
             "--dump-json",
+            "--ignore-no-formats-error",
             # "--cookies-from-browser",
             # "firefox",
             # "--cookies-from-browser",
@@ -1094,7 +1122,11 @@ def download_audio(video_url, output_path, quality="64", proxy=None, logger=None
             print(f"File not found: {expected_path}")
 
         return None
-    except Exception:
+    except Exception as exc:
+        if is_members_only_error(exc):
+            raise MembersOnlyVideoError(
+                f"Channel membership is required for {video_url}"
+            ) from exc
         print(traceback.format_exc())
         return None
 

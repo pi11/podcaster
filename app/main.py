@@ -17,7 +17,7 @@ register_tortoise(app, config=TORTOISE_ORM, generate_schemas=False)
 
 # Initialize Aerich
 @app.listener("before_server_start")
-async def init_aerich(app, loop):
+async def init_aerich(app):
     command = Command(tortoise_config=TORTOISE_ORM)
     await command.init()
 
