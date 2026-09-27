@@ -79,13 +79,7 @@ class TgChannel(models.Model):
         return self.name
 
     async def count(self):
-        count = 0
-        sources = await Source.filter(tg_channel=self.id)
-        for source in sources:
-            count += await Podcast.filter(
-                source=source, is_active=True
-            ).count()  # await source.count()
-        return count
+        return await Podcast.filter(tg_channel_id=self.id, is_active=True).count()
 
     class Meta:
         table = "tgchannel"

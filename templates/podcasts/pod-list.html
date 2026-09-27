@@ -11,7 +11,7 @@
   </thead>
   <tbody>
     {% for p in podcasts %}
-    <tr {% if  p.get_size_mb_int() > 49 %}style="background-color: rgba(125, 0, 0, 0.1);"{% endif %}>
+    <tr {% if p.get_size_mb_int() >= 50 %}style="background-color: rgba(125, 0, 0, 0.1);"{% endif %}>
       <td>{{ p.id }}</td>
       <td>{{ p.name }}<br />
       {{ p.url }}
@@ -36,10 +36,23 @@
        <a href="{{ p.file }}">mp3</a>
       </td>
       <td>
-        <a href="/podcasts?tg_id={{ p.tg_channel.id }}">{{ p.tg_channel }}</a>
+        {% if p.tg_channel_id %}
+        <a href="/podcasts?tg_id={{ p.tg_channel_id }}{% if under_50mb %}&amp;under_50mb=1{% endif %}">{{ p.tg_channel }}</a>
+        {% else %}
+        —
+        {% endif %}
         <br />
-        {{ p.source.name }}
-
+        {% if p.source %}{{ p.source.name }}{% else %}—{% endif %}
+        <form class="podcast-channel-form" method="post" action="/podcasts/{{ p.id }}/channel{% if return_query %}?{{ return_query }}{% endif %}">
+          <label for="podcast-channel-{{ p.id }}">Изменить TG канал</label>
+          <select id="podcast-channel-{{ p.id }}" name="tg_channel_id">
+            <option value="" {% if not p.tg_channel_id %}selected{% endif %}>Без TG канала</option>
+            {% for tg in tgs %}
+            <option value="{{ tg.id }}" {% if tg.id == p.tg_channel_id %}selected{% endif %}>{{ tg.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="button">Сохранить</button>
+        </form>
       </td>
        <td title="{{ p.publication_date }}">{{ p.get_date() }}</td>
       <td>

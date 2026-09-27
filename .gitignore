@@ -36,3 +36,5 @@ media/
 *.log
 cookies.txt
 .pot-provider/
+tmp_down/
+lst.txt

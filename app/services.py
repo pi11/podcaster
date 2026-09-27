@@ -281,6 +281,44 @@ class PodcastService:
     """Service for podcast operations"""
 
     @staticmethod
+    async def get_page(
+        page: int,
+        per_page: int = 20,
+        tg_id: int = 0,
+        source_id: int = 0,
+        under_50mb: bool = False,
+    ):
+        """Return a page of podcasts using the list's existing filters."""
+        query = Podcast.all()
+        if tg_id:
+            query = query.filter(
+                tg_channel_id=tg_id,
+                is_active=True,
+                is_posted=False,
+                is_processed=True,
+            )
+            ordering = ("publication_date", "id")
+        elif source_id:
+            query = query.filter(source_id=source_id, is_active=True)
+            ordering = ("-id",)
+        else:
+            ordering = ("-id",)
+
+        if under_50mb:
+            query = query.filter(filesize__lt=50_000_000)
+
+        total = await query.count()
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        page = min(max(page, 1), total_pages)
+        podcasts = await (
+            query.order_by(*ordering)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .prefetch_related("source", "tg_channel", "categories")
+        )
+        return podcasts, total, page, total_pages
+
+    @staticmethod
     async def get_all() -> List[Podcast]:
         """Get all podcasts"""
         return await Podcast.all().prefetch_related("source")
@@ -360,6 +398,16 @@ class PodcastService:
             return await Podcast.get(id=id).prefetch_related("source")
         except DoesNotExist:
             return None
+
+    @staticmethod
+    async def set_tg_channel(id: int, tg_channel_id: Optional[int]) -> Optional[Podcast]:
+        """Change only the podcast's Telegram channel."""
+        podcast = await PodcastService.get_by_id(id)
+        if podcast is None:
+            return None
+        podcast.tg_channel_id = tg_channel_id
+        await podcast.save(update_fields=["tg_channel_id"])
+        return podcast
 
     @staticmethod
     async def get_recent(limit: int = 10) -> List[Podcast]:

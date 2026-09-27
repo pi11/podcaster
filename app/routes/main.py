@@ -5,7 +5,7 @@ from sanic_ext import render
 from sanic.response import file_stream
 from tortoise.exceptions import DoesNotExist, IntegrityError
 from datetime import datetime
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from app.models import Category, CategoryIdentification, Source, Podcast
 from app.services import (
@@ -396,21 +396,93 @@ async def sources_delete(request, source_id):
 
 
 # Podcast routes
+def podcast_list_url(tg_id=0, source_id=0, under_50mb=False, page=None):
+    """Build a podcast list URL from supported filters and page number."""
+    params = {}
+    if tg_id:
+        params["tg_id"] = tg_id
+    elif source_id:
+        params["source_id"] = source_id
+    if under_50mb:
+        params["under_50mb"] = 1
+    if page is not None and page > 1:
+        params["page"] = page
+    return "/podcasts" + (f"?{urlencode(params)}" if params else "")
+
+
+def positive_int(value, default=0):
+    try:
+        return max(int(value), 0)
+    except (TypeError, ValueError):
+        return default
+
+
 @bp.route("/podcasts", methods=["GET"])
 async def podcasts_list(request):
     """Render podcasts list"""
-
-    source_id = int(request.args.get("source_id", 0))
-
-    tg_id = int(request.args.get("tg_id", 0))
-    if tg_id:
-        podcasts = await PodcastService.get_relevant(tg_id)
-    elif source_id:
-        podcasts = await PodcastService.get_by_source(source_id)
-    else:
-        podcasts = await PodcastService.get_all()
+    source_id = positive_int(request.args.get("source_id"))
+    tg_id = positive_int(request.args.get("tg_id"))
+    page = positive_int(request.args.get("page"), 1)
+    under_50mb = request.args.get("under_50mb") == "1"
+    podcasts, total, page, total_pages = await PodcastService.get_page(
+        page=page,
+        tg_id=tg_id,
+        source_id=source_id,
+        under_50mb=under_50mb,
+    )
+    current_url = podcast_list_url(tg_id, source_id, under_50mb, page)
     return await render(
-        "podcasts/list.html", context=inj({"podcasts": podcasts, "tg_id": tg_id})
+        "podcasts/list.html",
+        context=inj(
+            {
+                "podcasts": podcasts,
+                "tgs": await TgService.get_all(),
+                "tg_id": tg_id,
+                "source_id": source_id,
+                "under_50mb": under_50mb,
+                "page": page,
+                "total": total,
+                "total_pages": total_pages,
+                "page_links": [
+                    (number, podcast_list_url(tg_id, source_id, under_50mb, number))
+                    for number in range(max(1, page - 2), min(total_pages, page + 2) + 1)
+                ],
+                "first_url": podcast_list_url(tg_id, source_id, under_50mb, 1),
+                "prev_url": podcast_list_url(tg_id, source_id, under_50mb, page - 1),
+                "next_url": podcast_list_url(tg_id, source_id, under_50mb, page + 1),
+                "last_url": podcast_list_url(tg_id, source_id, under_50mb, total_pages),
+                "return_query": current_url.partition("?")[2],
+            }
+        ),
+    )
+
+
+@bp.route("/podcasts/<podcast_id:int>/channel", methods=["POST"])
+async def podcasts_update_channel(request, podcast_id):
+    """Assign a podcast to a Telegram channel, or leave it unassigned."""
+    channel_value = request.form.get("tg_channel_id")
+    if channel_value is None:
+        return response.text("Telegram channel is required", status=400)
+
+    try:
+        channel_id = int(channel_value) if channel_value else None
+    except (TypeError, ValueError):
+        return response.text("Invalid Telegram channel", status=400)
+
+    if channel_id is not None and not await TgService.get_by_id(channel_id):
+        return response.text("Telegram channel not found", status=400)
+
+    podcast = await PodcastService.set_tg_channel(podcast_id, channel_id)
+    if not podcast:
+        return response.text("Podcast not found", status=404)
+
+    return response.redirect(
+        podcast_list_url(
+            tg_id=positive_int(request.args.get("tg_id")),
+            source_id=positive_int(request.args.get("source_id")),
+            under_50mb=request.args.get("under_50mb") == "1",
+            page=positive_int(request.args.get("page"), 1),
+        )
     )
 
 

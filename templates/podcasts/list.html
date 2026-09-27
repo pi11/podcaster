@@ -1,4 +1,26 @@
 {% extends "base.html" %}
 {% block content %}
+<form class="podcast-filters" method="get" action="/podcasts">
+  {% if tg_id %}<input type="hidden" name="tg_id" value="{{ tg_id }}">{% elif source_id %}<input type="hidden" name="source_id" value="{{ source_id }}">{% endif %}
+  <label><input type="checkbox" name="under_50mb" value="1" {% if under_50mb %}checked{% endif %}> Только подкасты меньше 50 MB</label>
+  <button type="submit" class="button">Применить</button>
+</form>
+<p>Найдено: {{ total }}</p>
 {% include "podcasts/pod-list.html" %}
+{% if total_pages > 1 %}
+<nav class="podcast-pagination" aria-label="Страницы подкастов">
+  {% if page > 1 %}
+  <a href="{{ first_url }}">Первая</a>
+  <a href="{{ prev_url }}">Назад</a>
+  {% endif %}
+  {% for number, url in page_links %}
+    {% if number == page %}<span aria-current="page">{{ number }}</span>{% else %}<a href="{{ url }}">{{ number }}</a>{% endif %}
+  {% endfor %}
+  {% if page < total_pages %}
+  <a href="{{ next_url }}">Вперёд</a>
+  <a href="{{ last_url }}">Последняя</a>
+  {% endif %}
+  <span>Страница {{ page }} из {{ total_pages }}</span>
+</nav>
+{% endif %}
 {% endblock %}
