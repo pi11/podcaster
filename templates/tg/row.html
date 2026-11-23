@@ -1,22 +1,32 @@
 <tr id="tg-{{ tg.id }}">
   <td>{{ tg.id }}</td>
   <td>
-    {{ tg.name }}
+    <span class="tg-view">{{ tg.name }}</span>
+    <input class="tg-edit" form="tg-form-{{ tg.id }}" type="text" name="name" value="{{ tg.name }}" maxlength="100" required hidden>
     <a href="/podcasts?tg_id={{ tg.id }}">({{ tg.count() }})</a>
-
   </td>
   <td>
-    {{ tg.tg_id }}
+    <span class="tg-view">{{ tg.tg_id }}</span>
+    <input class="tg-edit" form="tg-form-{{ tg.id }}" type="text" name="id" value="{{ tg.tg_id }}" maxlength="30" required hidden>
   </td>
   <td>
-    {{ tg.auto_post }}
+    <span class="tg-view">{{ tg.auto_post }}</span>
+    <label class="tg-edit" hidden>
+      <input form="tg-form-{{ tg.id }}" type="checkbox" name="auto_post" value="check" style="width:auto" {% if tg.auto_post %}checked{% endif %}>
+      Автопостинг
+    </label>
   </td>
+  <td><a href="/sources?channel_id={{ tg.id }}">Источники</a></td>
   <td>
-    <button hx-post="/tg/{{ tg.id }}/delete"
+    <form id="tg-form-{{ tg.id }}" hx-post="/tg/{{ tg.id }}"
+          hx-target="#tg-{{ tg.id }}" hx-swap="outerHTML"></form>
+    <button type="button" class="tg-view btn" onclick="toggleTgEdit({{ tg.id }})">Edit</button>
+    <button type="submit" form="tg-form-{{ tg.id }}" class="tg-edit btn" hidden>Save</button>
+    <button type="button" class="tg-edit btn" onclick="toggleTgEdit({{ tg.id }}, true)" hidden>Cancel</button>
+    <button type="button" class="tg-view btn" hx-post="/tg/{{ tg.id }}/delete"
             hx-confirm="Are you sure you want to delete this channel?"
             hx-target="#tg-{{ tg.id }}"
-            hx-swap="outerHTML"
-            class="btn">
+            hx-swap="outerHTML">
       Delete
     </button>
   </td>

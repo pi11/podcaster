@@ -41,6 +41,9 @@ MAX_VIDEO_AGE_DAYS = 1400
 DOWNLOAD_AUDIO_QUALITY = "64"
 POT_PROVIDER_URL = os.getenv("POT_PROVIDER_URL", "http://127.0.0.1:4416")
 YOUTUBE_PLAYER_CLIENT = "tv_simply"
+# Work around the current YouTube `main` player n-challenge failure until the
+# yt-dlp release with the `tv` default is installed.
+YOUTUBE_PLAYER_JS_VARIANT = os.getenv("YOUTUBE_PLAYER_JS_VARIANT", "tv")
 YOUTUBE_FALLBACK_CLIENTS = tuple(
     client.strip()
     for client in os.getenv(
@@ -118,7 +121,7 @@ def add_youtube_extractor_arguments(
             "--remote-components",
             "ejs:github",
             "--extractor-args",
-            f"youtube:player_client={player_client};pot_trace=true",
+            f"youtube:player_client={player_client};player_js_variant={YOUTUBE_PLAYER_JS_VARIANT};pot_trace=true",
             "--extractor-args",
             f"youtubepot-bgutilhttp:base_url={POT_PROVIDER_URL}",
         ]
@@ -183,6 +186,21 @@ def is_retryable_youtube_failure(error: DownloadCommandError) -> bool:
             "no formats found",
         )
     )
+
+
+def is_missing_youtube_channel(error: DownloadCommandError) -> bool:
+    """Recognize a terminal channel listing 404, not an intermediate retry."""
+    if error.stage != "channel discovery":
+        return False
+    direct_404 = re.search(
+        r"(?m)^ERROR: \[youtube:tab\].*HTTP Error 404\b", error.stderr
+    )
+    exhausted_404 = re.search(
+        r"(?m)^WARNING: \[youtube:tab\].*HTTP Error 404\b.*Giving up after",
+        error.stderr,
+    )
+    terminal_tab_error = re.search(r"(?m)^ERROR: \[youtube:tab\]", error.stderr)
+    return bool(direct_404 or (exhausted_404 and terminal_tab_error))
 
 
 def is_members_only_error(error: object) -> bool:
@@ -567,24 +585,24 @@ def download_youtube(
 
             # Get sources
             if source_id:
-                sources = await Source.filter(id=source_id)
+                sources = await Source.filter(id=source_id, is_active=True)
                 if not sources:
-                    click.echo(f"❌ Source with ID {source_id} not found.")
+                    click.echo(f"❌ Active source with ID {source_id} not found.")
                     return
             elif tg_channel:
                 print(f"Processing only for tg channel: [{tg_channel}]")
                 sources = await SourceService.get_by_channel_id(
-                    tg_channel_id=tg_channel
+                    tg_channel_id=tg_channel, active_only=True
                 )
             else:
                 if random_sort:
                     print("Sorting sources randomly")
-                    sources = await SourceService.get_all_random()
+                    sources = await SourceService.get_all_random(active_only=True)
                 else:
-                    sources = await SourceService.get_all()
+                    sources = await SourceService.get_all(active_only=True)
 
             if not sources:
-                click.echo("❌ No sources found.")
+                click.echo("❌ No active sources found.")
                 return
 
             # Ensure output directory exists
@@ -753,7 +771,18 @@ async def process_channel_download(
         ]
         add_youtube_extractor_arguments(cmd, logger)
         add_proxy_argument(cmd, proxy)
-        process = run_download_command(cmd, logger, "channel discovery", proxy)
+        try:
+            process = run_download_command(cmd, logger, "channel discovery", proxy)
+        except DownloadCommandError as exc:
+            if is_missing_youtube_channel(exc):
+                await SourceService.set_active(source.id, False)
+                logger.warning(
+                    "Disabled source after channel listing returned 404: id=%s url=%s",
+                    source.id,
+                    source.url,
+                )
+                return 0
+            raise
         videos = [
             json.loads(line) for line in process.stdout.splitlines() if line.strip()
         ]
@@ -964,6 +993,7 @@ def get_video_info(url, proxy: Optional[str] = None, logger=None):
         "extractor_args": {
             "youtube": {
                 "player_client": [YOUTUBE_PLAYER_CLIENT],
+                "player_js_variant": [YOUTUBE_PLAYER_JS_VARIANT],
                 "pot_trace": ["true"],
             },
             "youtubepot-bgutilhttp": {"base_url": [POT_PROVIDER_URL]},

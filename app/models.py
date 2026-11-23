@@ -91,6 +91,7 @@ class Source(models.Model):
     id = fields.IntField(pk=True)
     url = fields.CharField(max_length=500, unique=True)
     name = fields.CharField(max_length=200)
+    is_active = fields.BooleanField(default=True)
     min_duration = fields.IntField(default=0)
     max_duration = fields.IntField(default=10800)
 

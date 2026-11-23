@@ -327,7 +327,8 @@ async def identifications_delete(request, identification_id):
 @bp.route("/sources", methods=["GET"])
 async def sources_list(request):
     """Render sources list"""
-    sources = await SourceService.get_all()
+    channel_id = positive_int(request.args.get("channel_id"))
+    sources = await SourceService.get_all(channel_id=channel_id or None)
 
     result = []
     for source in sources:
@@ -343,7 +344,8 @@ async def sources_list(request):
 
     tgs = await TgService.get_all()
     return await render(
-        "sources/list.html", context=inj({"sources": result, "tgs": tgs})
+        "sources/list.html",
+        context=inj({"sources": result, "tgs": tgs, "channel_id": channel_id}),
     )
 
 
@@ -392,6 +394,18 @@ async def sources_delete(request, source_id):
             return response.text("")
         return response.text("Source not found"), 404
 
+    return response.redirect("/sources")
+
+
+@bp.route("/sources/<source_id:int>/toggle", methods=["POST"])
+async def sources_toggle(request, source_id):
+    """Allow a disabled YouTube source to be enabled again."""
+    source = await SourceService.get_by_id(source_id)
+    if source is None:
+        return response.text("Source not found", status=404)
+    source = await SourceService.set_active(source_id, not source.is_active)
+    if request.headers.get("HX-Request"):
+        return await render("sources/row.html", context=await source_row_context(source))
     return response.redirect("/sources")
 
 
@@ -549,6 +563,21 @@ async def podcasts_delete(request, podcast_id):
 
 
 # TG routes
+def parse_tg_form(request):
+    """Validate the fields shared by Telegram channel create and update forms."""
+    tg_id = (request.form.get("id") or "").strip()
+    name = (request.form.get("name") or "").strip()
+    if not tg_id or not name:
+        return None, "Name and Telegram ID are required"
+    if len(tg_id) > 30 or len(name) > 100:
+        return None, "Name or Telegram ID is too long"
+    return {
+        "tg_id": tg_id,
+        "name": name,
+        "auto_post": bool(request.form.get("auto_post")),
+    }, None
+
+
 @bp.route("/tg", methods=["GET"])
 async def tg_list(request):
     """Render tg list"""
@@ -558,15 +587,12 @@ async def tg_list(request):
 
 @bp.route("/tg", methods=["POST"])
 async def tg_create(request):
-    """Create new source"""
-    tg_id = request.form.get("id")
-    name = request.form.get("name")
-    auto_post = request.form.get("auto_post", False)
+    """Create a Telegram channel."""
+    values, error = parse_tg_form(request)
+    if error:
+        return response.text(error, status=400)
 
-    if not id or not name:
-        return response.text("All fields are required", status=400)
-
-    tg = await TgService.create(tg_id=tg_id, name=name, auto_post=auto_post)
+    tg = await TgService.create(**values)
 
     if not tg:
         return response.text("Tg with this ID already exists", status=400)
@@ -577,15 +603,32 @@ async def tg_create(request):
     return response.redirect("/tg")
 
 
+@bp.route("/tg/<tg_id:int>", methods=["POST"])
+async def tg_update(request, tg_id):
+    """Update a Telegram channel."""
+    values, error = parse_tg_form(request)
+    if error:
+        return response.text(error, status=400)
+    if not await TgService.get_by_id(tg_id):
+        return response.text("Tg not found", status=404)
+
+    tg = await TgService.update(tg_id, **values)
+    if not tg:
+        return response.text("Tg with this ID already exists", status=400)
+    if request.headers.get("HX-Request"):
+        return await render("tg/row.html", context={"tg": tg})
+    return response.redirect("/tg")
+
+
 @bp.route("/tg/<tg_id:int>/delete", methods=["POST"])
 async def tg_delete(request, tg_id):
-    """Delete source"""
+    """Delete a Telegram channel."""
     success = await TgService.delete(tg_id)
 
     if request.headers.get("HX-Request"):
         if success:
             return response.text("")
-        return response.text("Tg not found"), 404
+        return response.text("Tg not found", status=404)
 
     return response.redirect("/tg")
 

@@ -11,6 +11,16 @@ function toggleSourceEdit(sourceId) {
 </script>
 <div class="">
     <h1 class="">Каналы</h1>
+    <form method="get" action="/sources" style="margin-bottom:20px;">
+        <label for="channel-filter">Телеграм канал:</label>
+        <select id="channel-filter" name="channel_id" onchange="this.form.submit()">
+            <option value="" {% if not channel_id %}selected{% endif %}>Все каналы</option>
+            {% for tg in tgs %}
+                <option value="{{ tg.id }}" {% if tg.id == channel_id %}selected{% endif %}>{{ tg.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Показать</button>
+    </form>
     
     <!-- Sources List -->
     <div class="overflow-x-auto">
@@ -22,6 +32,7 @@ function toggleSourceEdit(sourceId) {
                     <th>Стата</th>
                     <th>Урл</th>
                     <th>TG Канал</th>
+                    <th>Статус</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -40,7 +51,7 @@ function toggleSourceEdit(sourceId) {
         <!-- Empty State -->
         {% if not sources %}
             <div id="empty-state">
-                <p class="text-gray-600">No sources available yet. Add your first source above.</p>
+                <p class="text-gray-600">{% if channel_id %}Нет источников для выбранного телеграм канала.{% else %}Нет источников. Добавьте первый источник ниже.{% endif %}</p>
             </div>
         {% endif %}
       </div>
@@ -97,7 +108,7 @@ function toggleSourceEdit(sourceId) {
                         required>
                     <option value="">Выберете Tg канал</option>
                     {% for tg in tgs %}
-                        <option value="{{ tg.id }}">{{ tg.name }}</option>
+                        <option value="{{ tg.id }}" {% if tg.id == channel_id %}selected{% endif %}>{{ tg.name }}</option>
                     {% endfor %}
                 </select>
 

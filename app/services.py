@@ -176,9 +176,17 @@ class SourceService:
     """Service for source operations"""
 
     @staticmethod
-    async def get_all(order_by: str = "-id") -> List[Source]:
-        """Get all sources"""
-        return await Source.all().order_by(order_by)
+    async def get_all(
+        order_by: str = "-id", channel_id: Optional[int] = None,
+        active_only: bool = False,
+    ) -> List[Source]:
+        """Get sources, optionally filtered by Telegram channel."""
+        query = Source.all()
+        if channel_id is not None:
+            query = query.filter(tg_channel_id=channel_id)
+        if active_only:
+            query = query.filter(is_active=True)
+        return await query.order_by(order_by)
 
     @staticmethod
     async def get_total(id: int) -> int:
@@ -203,10 +211,13 @@ class SourceService:
         return await Podcast.filter(source_id=id, created_at__gte=d).count()
 
     @staticmethod
-    async def get_all_random() -> List[Source]:
+    async def get_all_random(active_only: bool = False) -> List[Source]:
         """Get all sources sorted randomly"""
+        query = Source.all()
+        if active_only:
+            query = query.filter(is_active=True)
         return (
-            await Source.all()
+            await query
             .annotate(order=Random())
             .order_by("order")
             .prefetch_related("source")
@@ -226,9 +237,24 @@ class SourceService:
             return None
 
     @staticmethod
-    async def get_by_channel_id(tg_channel_id: int) -> Optional[List[Source]]:
+    async def get_by_channel_id(
+        tg_channel_id: int, active_only: bool = False
+    ) -> List[Source]:
         """Get sources by tg channel id"""
-        return await Source.filter(tg_channel=tg_channel_id)
+        query = Source.filter(tg_channel_id=tg_channel_id)
+        if active_only:
+            query = query.filter(is_active=True)
+        return await query
+
+    @staticmethod
+    async def set_active(id: int, active: bool) -> Optional[Source]:
+        """Enable or disable a source without changing its other settings."""
+        source = await Source.filter(id=id).first()
+        if source is None:
+            return None
+        source.is_active = active
+        await source.save(update_fields=["is_active"])
+        return source
 
     @staticmethod
     async def create(url: str, name: str, only_related: bool = False) -> Source:
@@ -558,7 +584,7 @@ class PodcastService:
 
 
 class TgService:
-    """Service for source operations"""
+    """Service for Telegram channel operations"""
 
     @staticmethod
     async def get_all() -> List[TgChannel]:
@@ -579,12 +605,26 @@ class TgService:
             return None
 
     @staticmethod
-    async def create(tg_id: str, name: str, auto_post: bool = False) -> TgChannel:
+    async def create(tg_id: str, name: str, auto_post: bool = False) -> Optional[TgChannel]:
         """Create new tg"""
         try:
             return await TgChannel.create(tg_id=tg_id, name=name, auto_post=auto_post)
         except IntegrityError:
-            # Handle duplicate URL
+            return None
+
+    @staticmethod
+    async def update(
+        id: int, tg_id: str, name: str, auto_post: bool
+    ) -> Optional[TgChannel]:
+        """Update a Telegram channel, including its posting preference."""
+        try:
+            tg = await TgChannel.get(id=id)
+            tg.tg_id = tg_id
+            tg.name = name
+            tg.auto_post = auto_post
+            await tg.save()
+            return tg
+        except (DoesNotExist, IntegrityError):
             return None
 
     @staticmethod

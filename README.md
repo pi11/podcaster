@@ -46,14 +46,19 @@ MEDIA_DIR=media
 POT_PROVIDER_URL=http://127.0.0.1:4416
 # Cookie-free clients tried after the primary tv_simply download fails
 YOUTUBE_FALLBACK_CLIENTS=mweb,android_vr,web_safari
+# YouTube player JS variant used for n/sig deciphering
+YOUTUBE_PLAYER_JS_VARIANT=tv
 ```
 
 ### Database Initialization
+Run these commands from the repository root. Setting `PYTHONPATH` ensures
+Aerich imports this project's `app.config` if other projects also use an `app`
+package.
 ```bash
-aerich init -t app.config.TORTOISE_ORM
-aerich init-db
-aerich migrate
-aerich upgrade
+PYTHONPATH=. aerich init -t app.config.TORTOISE_ORM
+PYTHONPATH=. aerich init-db
+PYTHONPATH=. aerich migrate
+PYTHONPATH=. aerich upgrade
 ```
 
 ## Usage
@@ -76,6 +81,11 @@ poetry run podcast download --url "https://youtube.com/watch?v=..." \
   --proxy "http://user:pass@ip:port" --verbose
 
 ```
+
+If YouTube channel discovery ends with an HTTP 404 after yt-dlp's retries,
+that source is disabled for future download runs. Re-enable it from `/sources`
+after correcting its URL or when the channel becomes available again. Apply
+database migrations before running this version of the downloader.
 
 ### Proxy management
 
@@ -148,10 +158,10 @@ Files larger than 50 MB are automatically compressed: (Telegram limit for media 
 ### Migrations
 ```bash
 # Create migration
-aerich migrate --name "description"
+PYTHONPATH=. aerich migrate --name "description"
 
 # Apply migrations
-aerich upgrade
+PYTHONPATH=. aerich upgrade
 ```
 
 ## License

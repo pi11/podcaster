@@ -1,6 +1,15 @@
 {% extends "base.html" %}
 
 {% block content %}
+<script>
+function toggleTgEdit(channelId, cancel = false) {
+    const row = document.getElementById(`tg-${channelId}`);
+    if (cancel) row.querySelector('form').reset();
+    row.querySelectorAll('.tg-view, .tg-edit').forEach((element) => {
+        element.hidden = !element.hidden;
+    });
+}
+</script>
 <div class="">
     <h1 class="">Телеграм каналы</h1>
     <div>
@@ -9,8 +18,9 @@
                 <tr class="bg-gray-100 text-gray-700">
                     <th>ID</th>
                     <th>Название</th>
-                    <th>ID</th>
+                    <th>Telegram ID</th>
                     <th>Автопостинг</th>
+                    <th>Источники</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -37,6 +47,7 @@
                 <input type="text"
                        id="name"
                        name="name"
+                       maxlength="100"
                        required
                        placeholder="Название канала">
             </div>
@@ -46,12 +57,13 @@
                 <input type="text"
                        id="id"
                        name="id"
+                       maxlength="30"
                        required
                        placeholder="ID канала...">
             </div>
 
-                <input type="checkbox" id="myCheckbox" name="auto_post" value="check">
-                  <label for="myCheckbox">Автопостинг в канал:</label>
+                <input type="checkbox" id="auto_post" name="auto_post" value="check">
+                  <label for="auto_post">Автопостинг в канал:</label>
 
             <div class="form-actions">
                 <button type="submit" class="btn">
